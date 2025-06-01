@@ -1,0 +1,275 @@
+# OpenAPI Documentation Stub
+openapi: 3.0.0
+info:
+  title: Infinite Track API
+  version: 0.1.0
+  description: attendance tracking system
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        200:
+          description: API is healthy
+  /auth/login:
+    post:
+      summary: Login user
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: Email user (akan diubah ke lowercase)
+                  example: user@example.com
+                password:
+                  type: string
+                  format: password
+                  minLength: 8
+                  pattern: '^(?=.*[a-zA-Z])(?=.*[0-9])[a-zA-Z0-9]+$'
+                  description: Password minimal 8 karakter, kombinasi huruf dan angka, tanpa spasi
+                  example: password123
+      responses:
+        200:
+          description: Login berhasil
+          headers:
+            Set-Cookie:
+              description: HTTP-only cookie untuk web clients
+              schema:
+                type: string
+                example: token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...; HttpOnly; Path=/
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 1
+                      full_name:
+                        type: string
+                        example: John Doe
+                      role:
+                        type: integer
+                        example: 2
+                      photo:
+                        type: string
+                        nullable: true
+                        example: uploads/face/face-123456789.jpg
+                      token:
+                        type: string
+                        description: JWT token (hanya untuk mobile clients)
+                        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                  message:
+                    type: string
+                    example: Login berhasil
+        400:
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  code:
+                    type: string
+                    enum: [E_VALIDATION]
+                    example: E_VALIDATION
+                  message:
+                    type: string
+                    enum: 
+                      - Email tidak terdaftar
+                      - Password salah
+                      - Email wajib diisi
+                      - Format email tidak valid
+                      - Password wajib diisi
+                      - Password minimal 8 karakter
+                      - Password harus kombinasi huruf dan angka tanpa spasi
+                    example: Email tidak terdaftar
+        500:
+          description: Server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  code:
+                    type: string
+                    example: E_SERVER
+                  message:
+                    type: string
+                    example: Terjadi kesalahan pada server
+  /auth/register:
+    post:
+      summary: Register user baru
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+                - role
+                - position
+                - full_name
+                - nip_nim
+                - phone_number
+                - latitude
+                - longitude
+                - face_photo
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: user@email.com
+                password:
+                  type: string
+                  format: password
+                  minLength: 8
+                  example: password123
+                role:
+                  type: integer
+                  example: 2
+                position:
+                  type: integer
+                  example: 3
+                full_name:
+                  type: string
+                  minLength: 3
+                  example: 'Raihan Saputra'
+                nip_nim:
+                  type: string
+                  example: '12345678'
+                phone_number:
+                  type: string
+                  example: '08123456789'
+                division:
+                  type: integer
+                  example: 1
+                address:
+                  type: string
+                  example: 'Jl. Mawar No. 5'
+                latitude:
+                  type: number
+                  format: float
+                  example: -6.2088
+                longitude:
+                  type: number
+                  format: float
+                  example: 106.8456
+                radius:
+                  type: integer
+                  default: 100
+                  example: 150
+                description:
+                  type: string
+                  example: 'Rumah utama'
+                face_photo:
+                  type: string
+                  format: binary
+                  description: Upload foto wajah (jpg/png, max 1MB)
+      responses:
+        201:
+          description: User berhasil terdaftar
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      user:
+                        type: object
+                       
+                          id:
+                            type: integer
+                            example: 12
+                          full_name:
+                            type: string
+                            example: 'Raihan Saputra'
+                          role:
+                            type: integer
+                            example: 2
+                          token:
+                            type: string
+                            nullable: true
+                            example: null
+                      location:
+                        type: object
+                        properties:
+                          location_id:
+                            type: integer
+                            example: 8
+                          lat:
+                            type: number
+                            example: -6.2088
+                          lng:
+                            type: number
+                            example: 106.8456
+                          radius_m:
+                            type: integer
+                            example: 150
+                          description:
+                            type: string
+                            example: 'Rumah utama'
+                  message:
+                    type: string
+                    example: 'Registrasi berhasil'
+        400:
+          description: Validasi gagal
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  code:
+                    type: string
+                    example: E_VALIDATION
+                  message:
+                    type: string
+                    example: 'Email sudah ada'
+        500:
+          description: Server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  code:
+                    type: string
+                    example: E_DB
+                  message:
+                    type: string
+                    example: 'Terjadi kesalahan pada server'

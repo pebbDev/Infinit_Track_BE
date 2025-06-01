@@ -1,0 +1,41 @@
+{
+  "name": "infinite-track-backend",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "nodemon src/server.js",
+    "start": "node src/server.js",
+    "lint": "eslint . --ext .js",
+    "sequelize": "sequelize-cli",
+    "migrate": "sequelize-cli db:migrate --migrations-path src/models/migrations",
+    "seed": "sequelize-cli db:seed:all --seeders-path src/models/seeders",
+    "test": "jest"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^4.21.2",
+    "express-validator": "^7.2.1",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.0",
+    "mysql2": "^3.14.1",
+    "sequelize": "^6.37.7",
+    "sharp": "^0.34.2",
+    "swagger-ui-express": "^4",
+    "winston": "^3",
+    "winston-daily-rotate-file": "^4",
+    "yamljs": "^0.3"
+  },
+  "devDependencies": {
+    "eslint": "^8",
+    "eslint-config-prettier": "^9",
+    "eslint-plugin-import": "^2",
+    "jest": "^29",
+    "nodemon": "^3",
+    "prettier": "^3",
+    "sequelize-cli": "^6"
+  }
+}
