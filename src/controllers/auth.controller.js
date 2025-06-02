@@ -5,7 +5,15 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 
 import config from '../config/index.js';
-import { User, Photo, Role } from '../models/index.js';
+import {
+  User,
+  Photo,
+  Role,
+  Program,
+  Position,
+  Division,
+  AttendanceCategory
+} from '../models/index.js';
 import sequelize from '../config/database.js';
 import Location from '../models/location.js';
 import logger from '../utils/logger.js';
@@ -34,6 +42,26 @@ export const login = async (req, res) => {
           model: Role,
           as: 'role',
           attributes: ['id_roles', 'role_name']
+        },
+        {
+          model: Program,
+          as: 'program',
+          attributes: ['program_name']
+        },
+        {
+          model: Position,
+          as: 'position',
+          attributes: ['position_name']
+        },
+        {
+          model: Division,
+          as: 'division',
+          attributes: ['division_name']
+        },
+        {
+          model: Photo,
+          as: 'photo_file',
+          attributes: ['file_path', 'photo_updated_at']
         }
       ]
     });
@@ -45,9 +73,7 @@ export const login = async (req, res) => {
         code: 'E_LOGIN',
         message: 'Email tidak terdaftar'
       });
-    }
-
-    // Check password
+    } // Check password
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       logger.warn(`Login failed - Wrong password for: ${email}`);
@@ -58,9 +84,26 @@ export const login = async (req, res) => {
       });
     }
 
-    let userPhoto = null;
-    if (user.id_photos) {
-      userPhoto = await Photo.findByPk(user.id_photos);
+    // Get user's WFH default location
+    let wfhLocation = null;
+    try {
+      wfhLocation = await Location.findOne({
+        where: {
+          user_id: user.id_users,
+          id_attendance_categories: 2 // WFH category
+        },
+        include: [
+          {
+            model: AttendanceCategory,
+            as: 'category',
+            attributes: ['category_name']
+          }
+        ]
+      });
+    } catch (locationError) {
+      logger.warn(
+        `Could not fetch WFH location for user ${user.id_users}: ${locationError.message}`
+      );
     }
 
     // Check if existing token needs refresh (sliding window)
@@ -87,25 +130,32 @@ export const login = async (req, res) => {
     const responseData = {
       id: user.id_users,
       full_name: user.full_name,
-      role: {
-        id: user.role?.id_roles || null,
-        name: user.role?.role_name || null
-      },
-      photo: userPhoto?.file_path || null,
-      photo_updated_at: userPhoto?.photo_updated_at || null
+      email: user.email,
+      role_name: user.role?.role_name || null,
+      position_name: user.position?.position_name || null,
+      program_name: user.program?.program_name || null,
+      division_name: user.division ? user.division.division_name : null,
+      nip_nim: user.nip_nim,
+      phone: user.phone,
+      photo: user.photo_file ? user.photo_file.file_path : null,
+      photo_updated_at: user.photo_file ? user.photo_file.photo_updated_at : null,
+      location: wfhLocation
+        ? {
+            latitude: parseFloat(wfhLocation.latitude),
+            longitude: parseFloat(wfhLocation.longitude),
+            radius: parseFloat(wfhLocation.radius),
+            description: wfhLocation.description,
+            category_name: wfhLocation.category?.category_name || null
+          }
+        : null
     };
-
     if (shouldRefresh || !token) {
       const payload = {
         id: user.id_users,
         email: user.email,
         full_name: user.full_name,
-        role: {
-          id: user.role?.id_roles || null,
-          name: user.role?.role_name || null
-        },
-        photo: userPhoto?.file_path || null,
-        photo_updated_at: userPhoto?.photo_updated_at || null
+        role_name: user.role?.role_name || null,
+        photo: user.photo_file ? user.photo_file.file_path : null
       };
 
       token = jwt.sign(payload, config.jwt.secret, {

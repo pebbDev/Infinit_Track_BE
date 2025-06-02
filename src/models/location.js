@@ -2,6 +2,8 @@ import { DataTypes } from 'sequelize';
 
 import sequelize from '../config/database.js';
 
+import AttendanceCategory from './attendanceCategory.model.js';
+
 const Location = sequelize.define(
   'Location',
   {
@@ -55,13 +57,22 @@ const Location = sequelize.define(
 Location.associate = (models) => {
   Location.belongsTo(models.User, {
     foreignKey: 'user_id',
-    targetKey: 'id_users'
+    targetKey: 'id_users',
+    as: 'user'
   });
 
   Location.belongsTo(models.AttendanceCategory, {
     foreignKey: 'id_attendance_categories',
-    targetKey: 'id_attendance_categories'
+    targetKey: 'id_attendance_categories',
+    as: 'category'
   });
 };
+
+// Setup the association immediately
+Location.belongsTo(AttendanceCategory, {
+  foreignKey: 'id_attendance_categories',
+  targetKey: 'id_attendance_categories',
+  as: 'category'
+});
 
 export default Location;

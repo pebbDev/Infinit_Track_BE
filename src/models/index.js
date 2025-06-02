@@ -9,6 +9,7 @@ import Role from './role.model.js';
 import Position from './position.model.js';
 import Division from './division.model.js';
 import Photo from './photo.model.js';
+import AttendanceCategory from './attendanceCategory.model.js';
 
 // Jalankan relasi SETELAH define semua model
 User.belongsTo(Role, { foreignKey: 'id_roles', as: 'role' });
@@ -34,4 +35,15 @@ Division.hasMany(User, { foreignKey: 'id_divisions', as: 'users' });
 // Photo relations
 Photo.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 
-export { sequelize, User, Attendance, WfaRequest, Program, Role, Position, Division, Photo };
+export {
+  sequelize,
+  User,
+  Attendance,
+  WfaRequest,
+  Program,
+  Role,
+  Position,
+  Division,
+  Photo,
+  AttendanceCategory
+};
