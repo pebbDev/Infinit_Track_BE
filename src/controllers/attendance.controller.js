@@ -5,7 +5,7 @@ import { Attendance } from '../models/index.js';
 export const clockIn = async (req, res) => {
   try {
     const { location } = req.body;
-    const userId = req.user.userId;
+    const userId = req.user.id;
 
     // Check if user already clocked in today
     const today = new Date();
@@ -38,7 +38,7 @@ export const clockIn = async (req, res) => {
 
 export const clockOut = async (req, res) => {
   try {
-    const userId = req.user.userId;
+    const userId = req.user.id;
 
     // Find today's attendance record
     const today = new Date();
@@ -68,7 +68,7 @@ export const clockOut = async (req, res) => {
 
 export const getAttendanceHistory = async (req, res) => {
   try {
-    const userId = req.user.userId;
+    const userId = req.user.id;
     const { page = 1, limit = 10 } = req.query;
 
     const attendance = await Attendance.findAndCountAll({

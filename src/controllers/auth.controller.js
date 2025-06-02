@@ -65,7 +65,6 @@ export const login = async (req, res) => {
         }
       ]
     });
-
     if (!user) {
       logger.warn(`Login failed - Email not found: ${email}`);
       return res.status(400).json({
@@ -414,5 +413,107 @@ export const register = async (req, res) => {
       code: 'E_DB',
       message: err.message || 'Terjadi kesalahan pada server'
     });
+  }
+};
+
+export const getCurrentUser = async (req, res, next) => {
+  try {
+    // Get user data using req.user.id from verifyToken middleware
+    const user = await User.findOne({
+      where: { id_users: req.user.id },
+      include: [
+        {
+          model: Role,
+          as: 'role',
+          attributes: ['role_name']
+        },
+        {
+          model: Program,
+          as: 'program',
+          attributes: ['program_name']
+        },
+        {
+          model: Position,
+          as: 'position',
+          attributes: ['position_name']
+        },
+        {
+          model: Division,
+          as: 'division',
+          attributes: ['division_name']
+        },
+        {
+          model: Photo,
+          as: 'photo_file',
+          attributes: ['file_path', 'photo_updated_at']
+        }
+      ]
+    });
+
+    if (!user) {
+      logger.warn(`User not found for id: ${req.user.id}`);
+      return res.status(404).json({
+        success: false,
+        code: 'E_USER_NOT_FOUND',
+        message: 'User tidak ditemukan'
+      });
+    }
+
+    // Get user's WFH default location
+    let wfhLocation = null;
+    try {
+      wfhLocation = await Location.findOne({
+        where: {
+          user_id: user.id_users,
+          id_attendance_categories: 2 // WFH category
+        },
+        include: [
+          {
+            model: AttendanceCategory,
+            as: 'category',
+            attributes: ['category_name']
+          }
+        ]
+      });
+    } catch (locationError) {
+      logger.warn(
+        `Could not fetch WFH location for user ${user.id_users}: ${locationError.message}`
+      );
+    }
+
+    // Construct response data with same structure as login endpoint
+    const responseData = {
+      id: user.id_users,
+      full_name: user.full_name,
+      email: user.email,
+      role_name: user.role ? user.role.role_name : null,
+      position_name: user.position ? user.position.position_name : null,
+      program_name: user.program ? user.program.program_name : null,
+      division_name: user.division ? user.division.division_name : null,
+      nip_nim: user.nip_nim,
+      phone: user.phone,
+      photo: user.photo_file ? user.photo_file.file_path : null,
+      photo_updated_at: user.photo_file ? user.photo_file.photo_updated_at : null,
+      location: wfhLocation
+        ? {
+            latitude: parseFloat(wfhLocation.latitude),
+            longitude: parseFloat(wfhLocation.longitude),
+            radius: parseFloat(wfhLocation.radius),
+            description: wfhLocation.description,
+            category_name: wfhLocation.category?.category_name || null
+          }
+        : null
+    };
+
+    logger.info(`User profile fetched successfully for user: ${user.email}`);
+
+    res.status(200).json({
+      success: true,
+      data: responseData,
+      message: 'User profile fetched successfully'
+    });
+  } catch (error) {
+    logger.error(`Get current user error: ${error.message}`, { stack: error.stack });
+    next(error);
   }
 };

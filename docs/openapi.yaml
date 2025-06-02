@@ -273,3 +273,149 @@ paths:
                   message:
                     type: string
                     example: 'Terjadi kesalahan pada server'
+  /auth/me:
+    get:
+      summary: Get current user profile
+      tags:
+        - Authentication
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      description: |
+        Mengambil data profil lengkap pengguna yang sedang login.
+        Endpoint ini memverifikasi sesi pengguna yang aktif melalui token JWT 
+        yang ada di HttpOnly cookie atau Authorization header.
+      responses:
+        200:
+          description: User profile berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 1
+                      full_name:
+                        type: string
+                        example: "John Doe"
+                      email:
+                        type: string
+                        format: email
+                        example: "john.doe@example.com"
+                      role_name:
+                        type: string
+                        nullable: true
+                        example: "Employee"
+                      position_name:
+                        type: string
+                        nullable: true
+                        example: "Software Developer"
+                      program_name:
+                        type: string
+                        nullable: true
+                        example: "Professional Mentor"
+                      division_name:
+                        type: string
+                        nullable: true
+                        example: "IT Department"
+                      nip_nim:
+                        type: string
+                        example: "12345678"
+                      phone:
+                        type: string
+                        example: "08123456789"
+                      photo:
+                        type: string
+                        nullable: true
+                        example: "uploads/face/face-1748328939015-726641452.jpg"
+                      photo_updated_at:
+                        type: string
+                        format: date-time
+                        nullable: true
+                        example: "2025-06-02T10:30:00.000Z"
+                      location:
+                        type: object
+                        nullable: true
+                        properties:
+                          latitude:
+                            type: number
+                            format: float
+                            example: -6.2088
+                          longitude:
+                            type: number
+                            format: float
+                            example: 106.8456
+                          radius:
+                            type: number
+                            format: float
+                            example: 100.0
+                          description:
+                            type: string
+                            example: "Default WFH Location"
+                          category_name:
+                            type: string
+                            example: "Work From Home"
+                  message:
+                    type: string
+                    example: "User profile fetched successfully"
+        401:
+          description: Unauthorized - Token tidak valid atau tidak ada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    enum:
+                      - "No token provided"
+                      - "Invalid token"
+                    example: "No token provided"
+        404:
+          description: User tidak ditemukan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  code:
+                    type: string
+                    example: "E_USER_NOT_FOUND"
+                  message:
+                    type: string
+                    example: "User tidak ditemukan"
+        500:
+          description: Server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "Terjadi kesalahan pada server"
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: token
+      description: JWT token in HttpOnly cookie
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token in Authorization header

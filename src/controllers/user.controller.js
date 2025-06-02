@@ -2,8 +2,18 @@ import fs from 'fs';
 import path from 'path';
 
 import sharp from 'sharp';
+import { Op } from 'sequelize';
 
-import { User, Photo } from '../models/index.js';
+import {
+  User,
+  Photo,
+  Role,
+  Program,
+  Position,
+  Division,
+  AttendanceCategory,
+  Location
+} from '../models/index.js';
 import logger from '../utils/logger.js';
 
 export const getProfile = async (req, res) => {
@@ -41,23 +51,111 @@ export const updateProfile = async (req, res) => {
   }
 };
 
-export const getAllUsers = async (req, res) => {
+export const getAllUsers = async (req, res, next) => {
   try {
+    // Get query parameters for search and sorting
+    const search = req.query.search;
+    const sortBy = req.query.sortBy || 'created_at';
+    const sortOrder = req.query.sortOrder || 'DESC';
+
+    // Build where clause for filtering
+    let whereClause = {
+      deleted_at: null
+    };
+
+    // Add search functionality
+    if (search) {
+      whereClause[Op.or] = [
+        { full_name: { [Op.like]: `%${search}%` } },
+        { nip_nim: { [Op.like]: `%${search}%` } }
+      ];
+    }
+
+    // Query users with all required associations
     const users = await User.findAll({
-      attributes: ['id_users', 'full_name'],
-      where: {
-        deleted_at: null
-      }
+      where: whereClause,
+      include: [
+        {
+          model: Role,
+          as: 'role',
+          attributes: ['role_name']
+        },
+        {
+          model: Program,
+          as: 'program',
+          attributes: ['program_name']
+        },
+        {
+          model: Position,
+          as: 'position',
+          attributes: ['position_name']
+        },
+        {
+          model: Division,
+          as: 'division',
+          attributes: ['division_name'],
+          required: false
+        },
+        {
+          model: Photo,
+          as: 'photo_file',
+          attributes: ['file_path', 'photo_updated_at'],
+          required: false
+        },
+        {
+          model: Location,
+          as: 'wfh_location',
+          where: { id_attendance_categories: 2 },
+          include: [
+            {
+              model: AttendanceCategory,
+              as: 'attendance_category',
+              attributes: ['category_name']
+            }
+          ],
+          required: true
+        }
+      ],
+      order: [[sortBy, sortOrder.toUpperCase()]]
     });
-    const response = users.map((user) => ({
+
+    // Transform data to match the response structure from /auth/me endpoint
+    const transformedUsers = users.map((user) => ({
       id: user.id_users,
-      full_name: user.full_name
+      full_name: user.full_name,
+      email: user.email,
+      role_name: user.role ? user.role.role_name : null,
+      position_name: user.position ? user.position.position_name : null,
+      program_name: user.program ? user.program.program_name : null,
+      division_name: user.division ? user.division.division_name : null,
+      nip_nim: user.nip_nim,
+      phone: user.phone,
+      photo: user.photo_file ? user.photo_file.file_path : null,
+      photo_updated_at: user.photo_file ? user.photo_file.photo_updated_at : null,
+      location: user.wfh_location
+        ? {
+            location_id: user.wfh_location.location_id,
+            latitude: parseFloat(user.wfh_location.latitude),
+            longitude: parseFloat(user.wfh_location.longitude),
+            radius: parseFloat(user.wfh_location.radius),
+            description: user.wfh_location.description,
+            category_name: user.wfh_location.attendance_category
+              ? user.wfh_location.attendance_category.category_name
+              : 'Work From Home'
+          }
+        : null
     }));
 
-    logger.info(`Users sync requested, returned ${users.length} users`);
-    res.json(response);
+    logger.info(`Users fetched successfully, returned ${transformedUsers.length} users`);
+
+    res.json({
+      success: true,
+      data: transformedUsers,
+      message: 'Users fetched successfully'
+    });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    logger.error(`Error fetching users: ${error.message}`, { stack: error.stack });
+    next(error);
   }
 };
 

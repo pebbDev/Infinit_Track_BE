@@ -10,6 +10,7 @@ import Position from './position.model.js';
 import Division from './division.model.js';
 import Photo from './photo.model.js';
 import AttendanceCategory from './attendanceCategory.model.js';
+import Location from './location.js';
 
 // Jalankan relasi SETELAH define semua model
 User.belongsTo(Role, { foreignKey: 'id_roles', as: 'role' });
@@ -35,6 +36,22 @@ Division.hasMany(User, { foreignKey: 'id_divisions', as: 'users' });
 // Photo relations
 Photo.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 
+// Location relations with User and AttendanceCategory
+User.hasOne(Location, {
+  foreignKey: 'user_id',
+  as: 'wfh_location',
+  scope: { id_attendance_categories: 2 }
+});
+Location.belongsTo(User, {
+  foreignKey: 'user_id',
+  targetKey: 'id_users',
+  as: 'user'
+});
+Location.belongsTo(AttendanceCategory, {
+  foreignKey: 'id_attendance_categories',
+  as: 'attendance_category'
+});
+
 export {
   sequelize,
   User,
@@ -45,5 +62,6 @@ export {
   Position,
   Division,
   Photo,
-  AttendanceCategory
+  AttendanceCategory,
+  Location
 };

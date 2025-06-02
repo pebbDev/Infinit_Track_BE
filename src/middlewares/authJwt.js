@@ -11,13 +11,17 @@ export const verifyToken = (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, config.jwt.secret);
-    req.user = decoded;
-
-    // Sliding TTL - issue new token if less than 2 hours remaining
+    req.user = decoded; // Sliding TTL - issue new token if less than 2 hours remaining
     const now = Math.floor(Date.now() / 1000);
     if (decoded.exp - now < 2 * 60 * 60) {
       const newToken = jwt.sign(
-        { userId: decoded.userId, email: decoded.email },
+        {
+          id: decoded.id,
+          email: decoded.email,
+          full_name: decoded.full_name,
+          role_name: decoded.role_name,
+          photo: decoded.photo
+        },
         config.jwt.secret,
         { expiresIn: config.jwt.ttl }
       );

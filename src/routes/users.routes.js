@@ -3,6 +3,7 @@ import multer from 'multer';
 
 import { getAllUsers, uploadUserPhoto } from '../controllers/user.controller.js';
 import { verifyToken, requireAdmin } from '../middlewares/authJwt.js';
+import roleGuard from '../middlewares/roleGuard.js';
 
 const router = express.Router();
 
@@ -22,8 +23,8 @@ const upload = multer({
   }
 });
 
-// GET /users - Sync Android (protected route)
-router.get('/', verifyToken, getAllUsers);
+// GET /users - Get all users with full profile details (admin and management only)
+router.get('/', verifyToken, roleGuard(['Admin', 'Management']), getAllUsers);
 
 // POST /users/:id/photo - Admin Upload Foto Wajah User (admin only)
 router.post('/:id/photo', verifyToken, requireAdmin, upload.single('photo'), uploadUserPhoto);
