@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 import sharp from 'sharp';
+import bcrypt from 'bcryptjs';
 import { Op } from 'sequelize';
 
 import {
@@ -233,5 +234,226 @@ export const uploadUserPhoto = async (req, res) => {
       success: false,
       message: 'Terjadi kesalahan pada server'
     });
+  }
+};
+
+// PATCH /users/:id - Update User
+export const updateUser = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const {
+      full_name,
+      password,
+      phone,
+      nip_nim,
+      id_roles,
+      id_programs,
+      id_position,
+      id_divisions,
+      id_photos,
+      latitude,
+      longitude,
+      radius,
+      description
+    } = req.body;
+
+    // Find the user by ID
+    const user = await User.findByPk(id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Check if nip_nim is being changed and if it's already taken by another user
+    if (nip_nim && nip_nim !== user.nip_nim) {
+      const existingUser = await User.findOne({
+        where: {
+          nip_nim: nip_nim,
+          id_users: { [Op.ne]: id }, // Exclude current user
+          deleted_at: null
+        }
+      });
+
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          message: 'E_VALIDATION_NIP_EXISTS: NIP/NIM already exists'
+        });
+      }
+    }
+
+    // Prepare update data (exclude email as it should not be changed)
+    const updateData = {};
+    if (full_name !== undefined) updateData.full_name = full_name;
+    if (phone !== undefined) updateData.phone = phone;
+    if (nip_nim !== undefined) updateData.nip_nim = nip_nim;
+    if (id_roles !== undefined) updateData.id_roles = id_roles;
+    if (id_programs !== undefined) updateData.id_programs = id_programs;
+    if (id_position !== undefined) updateData.id_position = id_position;
+    if (id_divisions !== undefined) updateData.id_divisions = id_divisions;
+    if (id_photos !== undefined) updateData.id_photos = id_photos;
+
+    // Hash password if provided
+    if (password) {
+      updateData.password = await bcrypt.hash(password, 10);
+    }
+
+    // Update user data
+    await user.update(updateData);
+
+    // Handle WFH location update if location data is provided
+    if (
+      latitude !== undefined ||
+      longitude !== undefined ||
+      radius !== undefined ||
+      description !== undefined
+    ) {
+      const locationData = {};
+      if (latitude !== undefined) locationData.latitude = latitude;
+      if (longitude !== undefined) locationData.longitude = longitude;
+      if (radius !== undefined) locationData.radius = radius;
+      if (description !== undefined) locationData.description = description;
+
+      // Find or create WFH location record
+      const [location, created] = await Location.findOrCreate({
+        where: {
+          user_id: id,
+          id_attendance_categories: 2 // WFH category
+        },
+        defaults: {
+          user_id: id,
+          id_attendance_categories: 2,
+          ...locationData
+        }
+      });
+
+      // If location already exists, update it
+      if (!created) {
+        await location.update(locationData);
+      }
+    }
+
+    // Fetch updated user with all relations for response
+    const updatedUser = await User.findByPk(id, {
+      include: [
+        {
+          model: Role,
+          as: 'role',
+          attributes: ['role_name']
+        },
+        {
+          model: Program,
+          as: 'program',
+          attributes: ['program_name']
+        },
+        {
+          model: Position,
+          as: 'position',
+          attributes: ['position_name']
+        },
+        {
+          model: Division,
+          as: 'division',
+          attributes: ['division_name'],
+          required: false
+        },
+        {
+          model: Photo,
+          as: 'photo_file',
+          attributes: ['file_path', 'photo_updated_at'],
+          required: false
+        },
+        {
+          model: Location,
+          as: 'wfh_location',
+          where: { id_attendance_categories: 2 },
+          include: [
+            {
+              model: AttendanceCategory,
+              as: 'attendance_category',
+              attributes: ['category_name']
+            }
+          ],
+          required: false
+        }
+      ]
+    });
+
+    // Transform response data to match /auth/login and /auth/me structure
+    const responseData = {
+      id: updatedUser.id_users,
+      full_name: updatedUser.full_name,
+      email: updatedUser.email,
+      role_name: updatedUser.role ? updatedUser.role.role_name : null,
+      position_name: updatedUser.position ? updatedUser.position.position_name : null,
+      program_name: updatedUser.program ? updatedUser.program.program_name : null,
+      division_name: updatedUser.division ? updatedUser.division.division_name : null,
+      nip_nim: updatedUser.nip_nim,
+      phone: updatedUser.phone,
+      photo: updatedUser.photo_file ? updatedUser.photo_file.file_path : null,
+      photo_updated_at: updatedUser.photo_file ? updatedUser.photo_file.photo_updated_at : null,
+      location: updatedUser.wfh_location
+        ? {
+            location_id: updatedUser.wfh_location.location_id,
+            latitude: parseFloat(updatedUser.wfh_location.latitude),
+            longitude: parseFloat(updatedUser.wfh_location.longitude),
+            radius: parseFloat(updatedUser.wfh_location.radius),
+            description: updatedUser.wfh_location.description,
+            category_name: updatedUser.wfh_location.attendance_category
+              ? updatedUser.wfh_location.attendance_category.category_name
+              : 'Work From Home'
+          }
+        : null
+    };
+
+    logger.info(`User ${id} updated successfully by user ${req.user.id}`);
+
+    res.json({
+      success: true,
+      data: responseData,
+      message: 'User updated successfully'
+    });
+  } catch (error) {
+    logger.error(`Error updating user ${req.params.id}: ${error.message}`, { stack: error.stack });
+    next(error);
+  }
+};
+
+// DELETE /users/:id - Soft Delete User
+export const deleteUser = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    // Find the user by ID
+    const user = await User.findByPk(id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Check if user is already soft deleted
+    if (user.deleted_at) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Perform soft delete
+    await user.destroy();
+
+    logger.info(`User ${id} soft deleted successfully by user ${req.user.id}`);
+
+    res.json({
+      success: true,
+      message: 'User soft deleted successfully'
+    });
+  } catch (error) {
+    logger.error(`Error deleting user ${req.params.id}: ${error.message}`, { stack: error.stack });
+    next(error);
   }
 };

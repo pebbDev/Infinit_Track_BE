@@ -202,3 +202,42 @@ export const userRegistrationValidation = [
   ...registerValidation,
   validate
 ];
+
+// Validation for updating user
+export const validateUpdateUser = [
+  body('full_name')
+    .optional()
+    .isString()
+    .trim()
+    .notEmpty()
+    .withMessage('Full name must be a non-empty string'),
+  body('password')
+    .optional()
+    .isLength({ min: 8 })
+    .withMessage('Password must be at least 8 characters'),
+  body('phone').optional().isNumeric().withMessage('Phone must be numeric'),
+  body('nip_nim')
+    .optional()
+    .isString()
+    .trim()
+    .notEmpty()
+    .withMessage('NIP/NIM must be a non-empty string'),
+  body('id_roles').optional().isInt({ gt: 0 }).withMessage('Role ID must be a positive integer'),
+  body('id_programs')
+    .optional()
+    .isInt({ gt: 0 })
+    .withMessage('Program ID must be a positive integer'),
+  body('id_position')
+    .optional()
+    .isInt({ gt: 0 })
+    .withMessage('Position ID must be a positive integer'),
+  body('id_divisions')
+    .optional()
+    .isInt({ gt: 0 })
+    .withMessage('Division ID must be a positive integer'),
+  body('id_photos').optional().isInt({ gt: 0 }).withMessage('Photo ID must be a positive integer'),
+  body('latitude').optional().isDecimal().withMessage('Latitude must be a decimal number'),
+  body('longitude').optional().isDecimal().withMessage('Longitude must be a decimal number'),
+  body('radius').optional().isDecimal().withMessage('Radius must be a decimal number'),
+  body('description').optional().isString().trim().withMessage('Description must be a string')
+];
