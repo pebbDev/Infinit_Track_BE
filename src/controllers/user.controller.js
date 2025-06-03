@@ -13,7 +13,8 @@ import {
   Position,
   Division,
   AttendanceCategory,
-  Location
+  Location,
+  sequelize
 } from '../models/index.js';
 import logger from '../utils/logger.js';
 
@@ -454,6 +455,214 @@ export const deleteUser = async (req, res, next) => {
     });
   } catch (error) {
     logger.error(`Error deleting user ${req.params.id}: ${error.message}`, { stack: error.stack });
+    next(error);
+  }
+};
+
+// POST /users - Create New User (Admin and Management only)
+export const createUser = async (req, res, next) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const {
+      full_name,
+      email,
+      password,
+      phone,
+      nip_nim,
+      id_roles,
+      id_programs,
+      id_position,
+      id_divisions,
+      latitude,
+      longitude,
+      radius,
+      description
+    } = req.body; // Check if file uploaded
+    if (!req.file || !req.file.path) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        code: 'E_UPLOAD',
+        message:
+          'Upload gambar wajah gagal atau tidak ditemukan. Pastikan field name adalah "face_photo"'
+      });
+    }
+
+    // Check email uniqueness
+    const existingEmail = await User.findOne({
+      where: { email, deleted_at: null },
+      transaction
+    });
+    if (existingEmail) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        code: 'E_VALIDATION_EMAIL_EXISTS',
+        message: 'Email sudah digunakan'
+      });
+    }
+
+    // Check NIP/NIM uniqueness
+    const existingNip = await User.findOne({
+      where: { nip_nim, deleted_at: null },
+      transaction
+    });
+    if (existingNip) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        code: 'E_VALIDATION_NIP_EXISTS',
+        message: 'NIP/NIM sudah digunakan'
+      });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Temporarily disable foreign key checks to handle circular dependency
+    await sequelize.query('SET FOREIGN_KEY_CHECKS = 0', { transaction });
+
+    // Create photo record first with temporary user_id
+    const photo = await Photo.create(
+      {
+        file_path: req.file.path,
+        user_id: 1, // Temporary value, will be updated after user creation
+        photo_updated_at: new Date()
+      },
+      { transaction }
+    );
+
+    // Create user with photo reference
+    const newUser = await User.create(
+      {
+        full_name,
+        email,
+        password: hashedPassword,
+        phone,
+        nip_nim,
+        id_roles,
+        id_programs,
+        id_position,
+        id_divisions: id_divisions || null,
+        id_photos: photo.id_photos,
+        created_by: req.user.id,
+        created_at: new Date(),
+        updated_at: new Date()
+      },
+      { transaction }
+    );
+
+    // Update photo with correct user_id
+    await photo.update(
+      {
+        user_id: newUser.id_users
+      },
+      { transaction }
+    );
+
+    // Re-enable foreign key checks
+    await sequelize.query('SET FOREIGN_KEY_CHECKS = 1', { transaction });
+
+    // Create WFH location
+    await Location.create(
+      {
+        user_id: newUser.id_users,
+        id_attendance_categories: 2, // WFH category
+        latitude,
+        longitude,
+        radius: radius || 100,
+        description: description || 'Default WFH Location'
+      },
+      { transaction }
+    );
+
+    // Commit transaction
+    await transaction.commit();
+
+    // Fetch complete user data for response
+    const createdUser = await User.findByPk(newUser.id_users, {
+      include: [
+        {
+          model: Role,
+          as: 'role',
+          attributes: ['role_name']
+        },
+        {
+          model: Program,
+          as: 'program',
+          attributes: ['program_name']
+        },
+        {
+          model: Position,
+          as: 'position',
+          attributes: ['position_name']
+        },
+        {
+          model: Division,
+          as: 'division',
+          attributes: ['division_name'],
+          required: false
+        },
+        {
+          model: Photo,
+          as: 'photo_file',
+          attributes: ['file_path', 'photo_updated_at'],
+          required: false
+        },
+        {
+          model: Location,
+          as: 'wfh_location',
+          where: { id_attendance_categories: 2 },
+          include: [
+            {
+              model: AttendanceCategory,
+              as: 'attendance_category',
+              attributes: ['category_name']
+            }
+          ],
+          required: false
+        }
+      ]
+    });
+
+    // Transform response data to match /auth/login and /auth/me structure
+    const responseData = {
+      id: createdUser.id_users,
+      full_name: createdUser.full_name,
+      email: createdUser.email,
+      role_name: createdUser.role ? createdUser.role.role_name : null,
+      position_name: createdUser.position ? createdUser.position.position_name : null,
+      program_name: createdUser.program ? createdUser.program.program_name : null,
+      division_name: createdUser.division ? createdUser.division.division_name : null,
+      nip_nim: createdUser.nip_nim,
+      phone: createdUser.phone,
+      photo: createdUser.photo_file ? createdUser.photo_file.file_path : null,
+      photo_updated_at: createdUser.photo_file ? createdUser.photo_file.photo_updated_at : null,
+      location: createdUser.wfh_location
+        ? {
+            location_id: createdUser.wfh_location.location_id,
+            latitude: parseFloat(createdUser.wfh_location.latitude),
+            longitude: parseFloat(createdUser.wfh_location.longitude),
+            radius: parseFloat(createdUser.wfh_location.radius),
+            description: createdUser.wfh_location.description,
+            category_name: createdUser.wfh_location.attendance_category
+              ? createdUser.wfh_location.attendance_category.category_name
+              : 'Work From Home'
+          }
+        : null
+    };
+
+    logger.info(`User created successfully with ID ${newUser.id_users} by user ${req.user.id}`);
+
+    res.status(201).json({
+      success: true,
+      data: responseData,
+      message: 'User created successfully'
+    });
+  } catch (error) {
+    await transaction.rollback();
+    logger.error(`Error creating user: ${error.message}`, { stack: error.stack });
     next(error);
   }
 };

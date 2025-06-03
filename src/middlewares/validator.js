@@ -241,3 +241,95 @@ export const validateUpdateUser = [
   body('radius').optional().isDecimal().withMessage('Radius must be a decimal number'),
   body('description').optional().isString().trim().withMessage('Description must be a string')
 ];
+
+// Validation for creating new user by admin/management
+export const validateCreateUser = [
+  body('full_name')
+    .trim()
+    .notEmpty()
+    .withMessage('Nama lengkap wajib diisi')
+    .isLength({ min: 2 })
+    .withMessage('Nama lengkap minimal 2 karakter'),
+
+  body('email')
+    .trim()
+    .toLowerCase()
+    .isEmail()
+    .withMessage('Format email tidak valid')
+    .normalizeEmail(),
+
+  body('password')
+    .trim()
+    .isLength({ min: 8 })
+    .withMessage('Password minimal 8 karakter')
+    .matches(/^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]+$/)
+    .withMessage('Password wajib kombinasi angka dan huruf')
+    .custom((value) => {
+      if (passwordBlacklist.includes(value.toLowerCase())) {
+        throw new Error('Password terlalu mudah ditebak');
+      }
+      if (/\s/.test(value)) {
+        throw new Error('Password tidak boleh mengandung spasi');
+      }
+      return true;
+    }),
+
+  body('phone')
+    .notEmpty()
+    .withMessage('Nomor telepon wajib diisi')
+    .matches(/^\d+$/)
+    .withMessage('Nomor telepon hanya boleh berisi angka'),
+
+  body('nip_nim')
+    .notEmpty()
+    .withMessage('NIP/NIM wajib diisi')
+    .matches(/^[A-Za-z0-9]+$/)
+    .withMessage('NIP/NIM hanya kombinasi huruf dan angka'),
+
+  body('id_roles')
+    .notEmpty()
+    .withMessage('Role wajib dipilih')
+    .isInt({ gt: 0 })
+    .withMessage('Role ID harus berupa angka positif'),
+
+  body('id_programs')
+    .notEmpty()
+    .withMessage('Program wajib dipilih')
+    .isInt({ gt: 0 })
+    .withMessage('Program ID harus berupa angka positif'),
+
+  body('id_position')
+    .notEmpty()
+    .withMessage('Posisi wajib dipilih')
+    .isInt({ gt: 0 })
+    .withMessage('Position ID harus berupa angka positif'),
+
+  body('id_divisions')
+    .optional()
+    .isInt({ gt: 0 })
+    .withMessage('Division ID harus berupa angka positif'),
+
+  body('latitude')
+    .notEmpty()
+    .withMessage('Latitude wajib diisi')
+    .isFloat({ min: -90, max: 90 })
+    .withMessage('Latitude tidak valid')
+    .custom((value) => parseFloat(value) !== 0)
+    .withMessage('Latitude tidak boleh 0'),
+
+  body('longitude')
+    .notEmpty()
+    .withMessage('Longitude wajib diisi')
+    .isFloat({ min: -180, max: 180 })
+    .withMessage('Longitude tidak valid')
+    .custom((value) => parseFloat(value) !== 0)
+    .withMessage('Longitude tidak boleh 0'),
+
+  body('radius')
+    .optional()
+    .default(100)
+    .isFloat({ gt: 0 })
+    .withMessage('Radius harus lebih besar dari 0'),
+
+  body('description').optional().isString().trim().withMessage('Deskripsi harus berupa teks')
+];
