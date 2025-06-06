@@ -49,6 +49,11 @@ Attendance.belongsTo(Location, {
   foreignKey: 'location_id',
   as: 'location'
 });
+Attendance.belongsTo(AttendanceCategory, {
+  foreignKey: 'category_id',
+  targetKey: 'id_attendance_categories',
+  as: 'attendance_category'
+});
 Attendance.belongsTo(Booking, {
   foreignKey: 'booking_id',
   as: 'booking'

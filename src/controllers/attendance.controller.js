@@ -647,3 +647,162 @@ export const getAttendanceStatus = async (req, res, next) => {
     next(error);
   }
 };
+
+export const checkOut = async (req, res, next) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    // 1. Dapatkan Input
+    const attendanceId = req.params.id;
+    const userId = req.user.id;
+    const { latitude, longitude } = req.body;
+
+    // 2. Validasi Awal - Cari attendance record
+    const attendance = await Attendance.findByPk(attendanceId, { transaction });
+
+    if (!attendance) {
+      await transaction.rollback();
+      return res.status(404).json({
+        success: false,
+        message: 'Data attendance tidak ditemukan'
+      });
+    }
+
+    // Pastikan attendance milik user yang sedang login
+    if (attendance.user_id !== userId) {
+      await transaction.rollback();
+      return res.status(403).json({
+        success: false,
+        message: 'Anda tidak memiliki akses untuk melakukan check-out pada data ini'
+      });
+    }
+
+    // Pastikan belum melakukan check-out
+    if (attendance.time_out !== null) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        message: 'Anda sudah melakukan check-out hari ini.'
+      });
+    }
+
+    // 3. Validasi Lokasi Fleksibel
+    const validLocations = [];
+
+    // Ambil Lokasi WFO (kantor - id = 1)
+    const wfoLocation = await Location.findOne({
+      where: {
+        id_attendance_categories: 1,
+        user_id: null
+      },
+      transaction
+    });
+
+    if (wfoLocation) {
+      validLocations.push(wfoLocation);
+    }
+
+    // Ambil Lokasi WFH untuk user ini
+    const wfhLocation = await Location.findOne({
+      where: {
+        id_attendance_categories: 2,
+        user_id: userId
+      },
+      transaction
+    });
+
+    if (wfhLocation) {
+      validLocations.push(wfhLocation);
+    }
+
+    // Ambil Lokasi WFA Aktif (booking yang approved untuk hari ini)
+    const today = new Date();
+    const jakartaOffset = 7 * 60; // UTC+7 dalam menit
+    const localTime = new Date(today.getTime() + jakartaOffset * 60000);
+    const todayDate = localTime.toISOString().split('T')[0]; // YYYY-MM-DD format
+
+    const activeBooking = await Booking.findOne({
+      where: {
+        user_id: userId,
+        status: 2, // status approved (assuming 2 is approved)
+        schedule_date: todayDate
+      },
+      include: [
+        {
+          model: Location,
+          as: 'location',
+          required: true
+        }
+      ],
+      transaction
+    });
+
+    if (activeBooking && activeBooking.location) {
+      validLocations.push(activeBooking.location);
+    }
+
+    // Validasi jarak dengan semua lokasi valid
+    let isWithinRadius = false;
+
+    for (const location of validLocations) {
+      const distance = calculateDistance(
+        parseFloat(latitude),
+        parseFloat(longitude),
+        parseFloat(location.latitude),
+        parseFloat(location.longitude)
+      );
+
+      const allowedRadius = location.radius || 100; // default 100 meter
+
+      if (distance <= allowedRadius) {
+        isWithinRadius = true;
+        break;
+      }
+    }
+
+    if (!isWithinRadius) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        message: 'Anda berada di luar radius lokasi yang diizinkan untuk check-out.'
+      });
+    } // 4. Update Database
+    const now = new Date();
+    const timeOut = new Date(now.getTime() + jakartaOffset * 60000);
+    const timeIn = new Date(attendance.time_in);
+
+    // Hitung work_hour (selisih dalam jam)
+    const workHourMs = timeOut.getTime() - timeIn.getTime();
+    const workHour = Math.round((workHourMs / (1000 * 60 * 60)) * 100) / 100; // bulatkan ke 2 desimal
+
+    // Pastikan work_hour tidak negatif
+    if (workHour < 0) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        message: 'Error: Waktu check-out tidak boleh lebih awal dari check-in'
+      });
+    }
+
+    // Update attendance record
+    await attendance.update(
+      {
+        time_out: timeOut,
+        work_hour: workHour
+      },
+      { transaction }
+    );
+
+    await transaction.commit();
+
+    // 5. Kirim Respons Sukses
+    res.status(200).json({
+      success: true,
+      data: attendance,
+      message: 'Check-out berhasil'
+    });
+  } catch (error) {
+    await transaction.rollback();
+    next(error);
+  }
+};

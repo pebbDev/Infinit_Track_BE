@@ -436,3 +436,39 @@ export const updateStatusValidation = [
     .isIn(['approved', 'rejected'])
     .withMessage('Status harus "approved" atau "rejected"')
 ];
+
+// Check-out validation rules
+export const checkOutValidation = [
+  body('latitude')
+    .exists()
+    .withMessage('Latitude wajib diisi')
+    .notEmpty()
+    .withMessage('Latitude tidak boleh kosong')
+    .isNumeric()
+    .withMessage('Latitude harus berupa angka')
+    .isFloat({ min: -90, max: 90 })
+    .withMessage('Latitude harus antara -90 dan 90')
+    .custom((value) => {
+      const numValue = parseFloat(value);
+      if (numValue === 0) {
+        throw new Error('Latitude tidak boleh 0');
+      }
+      return true;
+    }),
+  body('longitude')
+    .exists()
+    .withMessage('Longitude wajib diisi')
+    .notEmpty()
+    .withMessage('Longitude tidak boleh kosong')
+    .isNumeric()
+    .withMessage('Longitude harus berupa angka')
+    .isFloat({ min: -180, max: 180 })
+    .withMessage('Longitude harus antara -180 dan 180')
+    .custom((value) => {
+      const numValue = parseFloat(value);
+      if (numValue === 0) {
+        throw new Error('Longitude tidak boleh 0');
+      }
+      return true;
+    })
+];

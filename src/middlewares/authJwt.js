@@ -36,13 +36,6 @@ export const verifyToken = async (req, res, next) => {
 
     req.user = decoded;
 
-    // Debug logging untuk troubleshooting role issues
-    console.log('🔍 Token Debug Info:');
-    console.log('- User ID:', decoded.id);
-    console.log('- Email:', decoded.email);
-    console.log('- Role Name:', decoded.role_name);
-    console.log('- Full Token Payload:', decoded);
-
     // Sliding TTL - issue new token if less than 2 hours remaining
     const now = Math.floor(Date.now() / 1000);
     if (decoded.exp - now < 2 * 60 * 60) {
