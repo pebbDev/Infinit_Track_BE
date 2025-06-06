@@ -10,6 +10,7 @@ import Position from './position.model.js';
 import Division from './division.model.js';
 import Photo from './photo.model.js';
 import AttendanceCategory from './attendanceCategory.model.js';
+import AttendanceStatus from './attendanceStatus.model.js';
 import Location from './location.js';
 import Settings from './settings.model.js';
 import Booking from './booking.model.js';
@@ -53,6 +54,11 @@ Attendance.belongsTo(AttendanceCategory, {
   foreignKey: 'category_id',
   targetKey: 'id_attendance_categories',
   as: 'attendance_category'
+});
+Attendance.belongsTo(AttendanceStatus, {
+  foreignKey: 'status_id',
+  targetKey: 'id_attendance_status',
+  as: 'status'
 });
 Attendance.belongsTo(Booking, {
   foreignKey: 'booking_id',
@@ -107,6 +113,7 @@ export {
   Division,
   Photo,
   AttendanceCategory,
+  AttendanceStatus,
   Location,
   Settings,
   Booking,

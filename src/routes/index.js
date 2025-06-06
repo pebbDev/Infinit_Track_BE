@@ -5,7 +5,7 @@ import attendanceRoutes from './attendance.routes.js';
 import usersRoutes from './users.routes.js';
 import referenceDataRoutes from './referenceData.routes.js';
 import bookingRoutes from './booking.routes.js';
-import reportRoutes from './report.routes.js';
+import summaryRoutes from './summary.routes.js';
 
 const router = express.Router();
 
@@ -13,7 +13,7 @@ const router = express.Router();
 router.use('/api/auth', authRoutes);
 router.use('/api/attendance', attendanceRoutes);
 router.use('/api/users', usersRoutes);
-router.use('/api/report', reportRoutes);
+router.use('/api/summary', summaryRoutes);
 router.use('/api', referenceDataRoutes);
 router.use('/api/bookings', bookingRoutes);
 

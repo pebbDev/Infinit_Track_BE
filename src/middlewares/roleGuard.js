@@ -10,7 +10,7 @@ export default (allowedRoles) => {
         code: 'E_UNAUTHORIZED',
         message: 'Unauthorized: No user data'
       });
-    }    // Get role name from JWT token - support both old and new format
+    } // Get role name from JWT token - support both old and new format
     const userRole = req.user.role_name || req.user.role?.name;
 
     // Debug logging untuk troubleshooting
@@ -20,7 +20,8 @@ export default (allowedRoles) => {
     console.log('- Required Roles:', allowedRoles);
     console.log('- Role check result:', allowedRoles.includes(userRole));
 
-    if (!userRole || !allowedRoles.includes(userRole)) {      logger.warn(
+    if (!userRole || !allowedRoles.includes(userRole)) {
+      logger.warn(
         `Role check failed - User role: "${userRole}", Required: ${allowedRoles.join(', ')}`
       );
       return res.status(403).json({
