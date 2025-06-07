@@ -8,7 +8,8 @@ import {
   checkIn,
   checkOut,
   debugCheckInTime,
-  deleteAttendance
+  deleteAttendance,
+  getAllAttendances
 } from '../controllers/attendance.controller.js';
 import { verifyToken } from '../middlewares/authJwt.js';
 import roleGuard from '../middlewares/roleGuard.js';
@@ -18,6 +19,9 @@ const router = express.Router();
 
 // All attendance routes require authentication
 router.use(verifyToken);
+
+// GET / - Get all attendances for admin/management with search and pagination
+router.get('/', roleGuard(['Admin', 'Management']), getAllAttendances);
 
 router.post('/clock-in', clockIn);
 router.post('/clock-out', clockOutOld);

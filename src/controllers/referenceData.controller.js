@@ -40,7 +40,7 @@ export const getPrograms = async (req, res, next) => {
 export const getPositions = async (req, res, next) => {
   try {
     const { program_id } = req.query;
-    
+
     const whereClause = {};
     if (program_id) {
       whereClause.id_programs = program_id;
