@@ -8,9 +8,11 @@ import {
   Location,
   Settings,
   AttendanceCategory,
+  AttendanceStatus,
   BookingStatus
 } from '../models/index.js';
 import { calculateDistance } from '../utils/geofence.js';
+import { formatWorkHour, calculateWorkHour } from '../utils/workHourFormatter.js';
 
 export const clockIn = async (req, res) => {
   try {
@@ -79,23 +81,74 @@ export const clockOut = async (req, res) => {
 export const getAttendanceHistory = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { page = 1, limit = 10 } = req.query;
+    const { page = 1, limit = 5 } = req.query;
 
-    const attendance = await Attendance.findAndCountAll({
-      where: { userId },
-      order: [['createdAt', 'DESC']],
+    // Calculate offset for pagination
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    // Query with rich response includes
+    const attendanceData = await Attendance.findAndCountAll({
+      where: { user_id: userId },
+      include: [
+        {
+          model: AttendanceCategory,
+          as: 'attendance_category',
+          attributes: ['category_name']
+        },
+        {
+          model: AttendanceStatus,
+          as: 'status',
+          attributes: ['attendance_status_name']
+        },
+        {
+          model: Location,
+          as: 'location',
+          attributes: ['description'],
+          required: false
+        }
+      ],
+      order: [['attendance_date', 'DESC']],
       limit: parseInt(limit),
-      offset: (page - 1) * limit
+      offset: offset
+    }); // Transform data response
+    const transformedData = attendanceData.rows.map((att) => {
+      return {
+        id_attendance: att.id_attendance,
+        attendance_date: att.attendance_date,
+        time_in: att.time_in,
+        time_out: att.time_out,
+        work_hour: formatWorkHour(att.work_hour),
+        category: att.attendance_category ? att.attendance_category.category_name : null,
+        status: att.status ? att.status.attendance_status_name : null,
+        location: att.location ? att.location.description : null,
+        notes: att.notes
+      };
     });
 
-    res.json({
-      attendance: attendance.rows,
-      total: attendance.count,
-      page: parseInt(page),
-      totalPages: Math.ceil(attendance.count / limit)
+    // Calculate pagination info
+    const totalPages = Math.ceil(attendanceData.count / parseInt(limit));
+
+    res.status(200).json({
+      success: true,
+      data: {
+        attendances: transformedData,
+        pagination: {
+          current_page: parseInt(page),
+          total_pages: totalPages,
+          total_items: attendanceData.count,
+          items_per_page: parseInt(limit),
+          has_next_page: parseInt(page) < totalPages,
+          has_prev_page: parseInt(page) > 1
+        }
+      },
+      message: 'Riwayat absensi berhasil diambil'
     });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
   }
 };
 
@@ -771,18 +824,8 @@ export const checkOut = async (req, res, next) => {
     const timeOut = new Date(now.getTime() + jakartaOffset * 60000);
     const timeIn = new Date(attendance.time_in);
 
-    // Hitung work_hour (selisih dalam jam)
-    const workHourMs = timeOut.getTime() - timeIn.getTime();
-    const workHour = Math.round((workHourMs / (1000 * 60 * 60)) * 100) / 100; // bulatkan ke 2 desimal
-
-    // Pastikan work_hour tidak negatif
-    if (workHour < 0) {
-      await transaction.rollback();
-      return res.status(400).json({
-        success: false,
-        message: 'Error: Waktu check-out tidak boleh lebih awal dari check-in'
-      });
-    }
+    // Hitung work_hour menggunakan utility function
+    const workHour = calculateWorkHour(timeIn, timeOut);
 
     // Update attendance record
     await attendance.update(
@@ -803,6 +846,35 @@ export const checkOut = async (req, res, next) => {
     });
   } catch (error) {
     await transaction.rollback();
+    next(error);
+  }
+};
+
+export const deleteAttendance = async (req, res, next) => {
+  try {
+    // Langkah 1: Dapatkan ID dari Parameter URL
+    const { id } = req.params;
+
+    // Langkah 2: Cari Record Absensi
+    const attendanceRecord = await Attendance.findByPk(id);
+
+    // Langkah 3: Handle Jika Data Tidak Ditemukan
+    if (!attendanceRecord) {
+      return res.status(404).json({
+        success: false,
+        message: 'Data absensi tidak ditemukan.'
+      });
+    }
+
+    // Langkah 4: Lakukan Hard Delete
+    await attendanceRecord.destroy();
+
+    // Langkah 5: Kirim Respons Sukses
+    res.status(200).json({
+      success: true,
+      message: 'Data absensi berhasil dihapus.'
+    });
+  } catch (error) {
     next(error);
   }
 };

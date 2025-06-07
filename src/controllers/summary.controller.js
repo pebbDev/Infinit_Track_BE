@@ -10,6 +10,7 @@ import {
   AttendanceStatus
 } from '../models/index.js';
 import logger from '../utils/logger.js';
+import { formatWorkHour } from '../utils/workHourFormatter.js';
 
 /**
  /**
@@ -284,10 +285,12 @@ export const getSummaryReport = async (req, res, next) => {
               category: category?.category_name || 'Unknown',
               coordinates: null
             };
-      } // Status informasi
+      }
+
+      // Status informasi
       const information =
         timeOut && timeOut !== '00:00:00'
-          ? `Work Duration: ${workHour} hours`
+          ? `Work Duration: ${formatWorkHour(workHour)}`
           : 'Currently checked in';
 
       return {
@@ -298,7 +301,7 @@ export const getSummaryReport = async (req, res, next) => {
         email: user?.email || null,
         time_in: timeIn,
         time_out: timeOut,
-        work_hour: workHour,
+        work_hour: formatWorkHour(workHour),
         attendance_date: attendance.attendance_date,
         location_details: locationDetails,
         status: status?.attendance_status_name || 'unknown',

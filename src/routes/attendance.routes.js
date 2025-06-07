@@ -7,9 +7,11 @@ import {
   getAttendanceStatus,
   checkIn,
   checkOut,
-  debugCheckInTime
+  debugCheckInTime,
+  deleteAttendance
 } from '../controllers/attendance.controller.js';
 import { verifyToken } from '../middlewares/authJwt.js';
+import roleGuard from '../middlewares/roleGuard.js';
 import { checkInValidation, checkOutValidation, validate } from '../middlewares/validator.js';
 
 const router = express.Router();
@@ -24,5 +26,8 @@ router.post('/checkout/:id', checkOutValidation, validate, checkOut);
 router.get('/history', getAttendanceHistory);
 router.get('/status-today', getAttendanceStatus);
 router.get('/debug-checkin-time', debugCheckInTime); // Debug endpoint
+
+// DELETE endpoint for admin and management to delete attendance record
+router.delete('/:id', verifyToken, roleGuard(['Admin', 'Management']), deleteAttendance);
 
 export default router;
