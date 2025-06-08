@@ -14,8 +14,9 @@ import {
   Role
 } from '../models/index.js';
 import { calculateDistance } from '../utils/geofence.js';
-import { formatWorkHour, calculateWorkHour } from '../utils/workHourFormatter.js';
+import { formatWorkHour, calculateWorkHour, formatTimeOnly } from '../utils/workHourFormatter.js';
 import { applySearch } from '../utils/searchHelper.js';
+import { triggerAutoCheckout } from '../jobs/autoCheckout.js';
 
 export const clockIn = async (req, res) => {
   try {
@@ -118,8 +119,8 @@ export const getAttendanceHistory = async (req, res) => {
       return {
         id_attendance: att.id_attendance,
         attendance_date: att.attendance_date,
-        time_in: att.time_in,
-        time_out: att.time_out,
+        time_in: formatTimeOnly(att.time_in),
+        time_out: formatTimeOnly(att.time_out),
         work_hour: formatWorkHour(att.work_hour),
         category: att.attendance_category ? att.attendance_category.category_name : null,
         status: att.status ? att.status.attendance_status_name : null,
@@ -683,7 +684,7 @@ export const getAttendanceStatus = async (req, res, next) => {
       data: {
         can_check_in,
         can_check_out,
-        checked_in_at: currentAttendance ? currentAttendance.time_in : null,
+        checked_in_at: currentAttendance ? formatTimeOnly(currentAttendance.time_in) : null,
         active_mode,
         active_location,
         today_date: todayDate,
@@ -844,7 +845,19 @@ export const checkOut = async (req, res, next) => {
     // 5. Kirim Respons Sukses
     res.status(200).json({
       success: true,
-      data: attendance,
+      data: {
+        id_attendance: attendance.id_attendance,
+        attendance_date: attendance.attendance_date,
+        time_in: formatTimeOnly(attendance.time_in),
+        time_out: formatTimeOnly(attendance.time_out),
+        work_hour: formatWorkHour(attendance.work_hour),
+        user_id: attendance.user_id,
+        category_id: attendance.category_id,
+        status_id: attendance.status_id,
+        location_id: attendance.location_id,
+        booking_id: attendance.booking_id,
+        notes: attendance.notes
+      },
       message: 'Check-out berhasil'
     });
   } catch (error) {
@@ -962,8 +975,8 @@ export const getAllAttendances = async (req, res, next) => {
         full_name: att.user?.full_name || 'Unknown User',
         nip_nim: att.user?.nip_nim || null,
         role_name: att.user?.role?.role_name || null,
-        time_in: att.time_in,
-        time_out: att.time_out,
+        time_in: formatTimeOnly(att.time_in),
+        time_out: formatTimeOnly(att.time_out),
         work_hour: formattedWorkHour,
         attendance_date: att.attendance_date,
         location: att.location
@@ -995,6 +1008,88 @@ export const getAllAttendances = async (req, res, next) => {
         records_per_page: limitNum,
         has_next_page: pageNum < totalPages,
         has_prev_page: pageNum > 1
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Manual trigger for automatic checkout (for testing purposes)
+ * This endpoint allows admins to manually trigger the auto checkout process
+ */
+export const manualAutoCheckout = async (req, res, next) => {
+  try {
+    // Only allow admins to trigger manual auto checkout
+    if (req.user.role_name !== 'Admin' && req.user.role_name !== 'Management') {
+      return res.status(403).json({
+        success: false,
+        message: 'Akses ditolak. Hanya admin dan manajemen yang dapat memicu auto checkout manual.'
+      });
+    }
+
+    // Trigger the auto checkout job
+    await triggerAutoCheckout();
+
+    res.status(200).json({
+      success: true,
+      message: 'Auto checkout manual berhasil dipicu. Periksa log untuk detail hasil.',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get auto checkout settings (for debugging/testing)
+ */
+export const getAutoCheckoutSettings = async (req, res, next) => {
+  try {
+    // Get the auto checkout time setting from database
+    const autoTimeSetting = await Settings.findOne({
+      where: {
+        setting_key: 'checkout.auto_time'
+      }
+    });
+
+    // Get current Jakarta time
+    const now = new Date();
+    const jakartaOffset = 7 * 60; // UTC+7 in minutes
+    const jakartaTime = new Date(now.getTime() + jakartaOffset * 60000);
+    const currentTimeString = jakartaTime.toISOString().substring(11, 19);
+    const currentDate = jakartaTime.toISOString().split('T')[0];
+
+    // Find active attendances (checked in but not checked out)
+    const activeAttendances = await Attendance.findAll({
+      where: {
+        attendance_date: currentDate,
+        time_out: null
+      },
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id_users', 'full_name', 'nip_nim']
+        }
+      ]
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        auto_checkout_time: autoTimeSetting?.setting_value || 'Not configured',
+        current_jakarta_time: currentTimeString,
+        current_date: currentDate,
+        active_attendances_count: activeAttendances.length,
+        active_attendances: activeAttendances.map((att) => ({
+          id_attendance: att.id_attendance,
+          user_id: att.user_id,
+          user_name: att.user?.full_name,
+          time_in: formatTimeOnly(att.time_in),
+          attendance_date: att.attendance_date
+        }))
       }
     });
   } catch (error) {

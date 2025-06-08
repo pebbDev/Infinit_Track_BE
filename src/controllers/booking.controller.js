@@ -1,5 +1,5 @@
 import sequelize from '../config/database.js';
-import { Booking, Location, BookingStatus, User } from '../models/index.js';
+import { Booking, Location, BookingStatus, User, Position } from '../models/index.js';
 
 // BAGIAN 1: Endpoint Membuat Booking (POST /api/bookings)
 export const createBooking = async (req, res, next) => {
@@ -213,9 +213,11 @@ export const updateBookingStatus = async (req, res, next) => {
 // Endpoint tambahan: Mendapatkan daftar booking (untuk admin)
 export const getAllBookings = async (req, res, next) => {
   try {
+    // Dapatkan Parameter Query
     const { status, page = 1, limit = 10 } = req.query;
     const offset = (page - 1) * limit;
 
+    // Buat objek whereClause untuk Sequelize
     const whereClause = {};
     if (status) {
       const statusMap = {
@@ -226,17 +228,26 @@ export const getAllBookings = async (req, res, next) => {
       whereClause.status = statusMap[status];
     }
 
+    // Lakukan Query ke Database dengan include yang lengkap
     const bookings = await Booking.findAndCountAll({
       where: whereClause,
       include: [
         {
           model: User,
           as: 'user',
-          attributes: ['full_name', 'email']
+          attributes: ['id_users', 'full_name', 'email', 'nip_nim'],
+          include: [
+            {
+              model: Position,
+              as: 'position',
+              attributes: ['position_name']
+            }
+          ]
         },
         {
           model: Location,
-          as: 'location'
+          as: 'location',
+          attributes: ['location_id', 'latitude', 'longitude', 'radius', 'description']
         },
         {
           model: BookingStatus,
@@ -246,20 +257,44 @@ export const getAllBookings = async (req, res, next) => {
       ],
       order: [['created_at', 'DESC']],
       limit: parseInt(limit),
-      offset: parseInt(offset)
-    });
+      offset: parseInt(offset),
+      distinct: true // Important for correct count with includes
+    }); // Transform data dengan struktur location yang grouped
+    const transformedBookings = bookings.rows.map((booking) => ({
+      booking_id: booking.booking_id,
+      user_id: booking.user.id_users,
+      user_full_name: booking.user.full_name,
+      user_email: booking.user.email,
+      user_nip_nim: booking.user.nip_nim,
+      user_position_name: booking.user.position ? booking.user.position.position_name : null,
+      schedule_date: booking.schedule_date,
+      status: booking.booking_status.name_status,
+      location: {
+        location_id: booking.location.location_id,
+        latitude: parseFloat(booking.location.latitude),
+        longitude: parseFloat(booking.location.longitude),
+        radius: parseFloat(booking.location.radius),
+        description: booking.location.description
+      },
+      notes: booking.notes,
+      created_at: booking.created_at,
+      processed_at: booking.processed_at,
+      approved_by: booking.approved_by
+    }));
 
+    // Response dengan struktur data yang flattened
     res.status(200).json({
       success: true,
       data: {
-        bookings: bookings.rows,
+        bookings: transformedBookings,
         pagination: {
           current_page: parseInt(page),
           total_pages: Math.ceil(bookings.count / limit),
           total_items: bookings.count,
           items_per_page: parseInt(limit)
         }
-      }
+      },
+      message: 'Daftar booking berhasil diambil'
     });
   } catch (error) {
     next(error);

@@ -69,8 +69,32 @@ export const calculateWorkHour = (timeIn, timeOut) => {
   return Math.round((workHourMs / (1000 * 60 * 60)) * 100) / 100;
 };
 
+/**
+ * Format datetime to "HH:MM" format
+ * @param {Date|string} dateTime - Date object or datetime string
+ * @returns {string} Formatted time as "HH:MM" (e.g., "08:30")
+ */
+export const formatTimeOnly = (dateTime) => {
+  if (!dateTime) {
+    return '00:00';
+  }
+
+  const date = new Date(dateTime);
+
+  // Check if date is valid
+  if (isNaN(date.getTime())) {
+    return '00:00';
+  }
+
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+};
+
 export default {
   formatWorkHour,
   parseWorkHour,
-  calculateWorkHour
+  calculateWorkHour,
+  formatTimeOnly
 };

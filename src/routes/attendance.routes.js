@@ -9,7 +9,9 @@ import {
   checkOut,
   debugCheckInTime,
   deleteAttendance,
-  getAllAttendances
+  getAllAttendances,
+  manualAutoCheckout,
+  getAutoCheckoutSettings
 } from '../controllers/attendance.controller.js';
 import { verifyToken } from '../middlewares/authJwt.js';
 import roleGuard from '../middlewares/roleGuard.js';
@@ -30,6 +32,12 @@ router.post('/checkout/:id', checkOutValidation, validate, checkOut);
 router.get('/history', getAttendanceHistory);
 router.get('/status-today', getAttendanceStatus);
 router.get('/debug-checkin-time', debugCheckInTime); // Debug endpoint
+
+// Manual auto checkout endpoint (Admin only)
+router.post('/manual-auto-checkout', roleGuard(['Admin', 'Management']), manualAutoCheckout);
+
+// Get auto checkout settings endpoint (for debugging)
+router.get('/auto-checkout-settings', roleGuard(['Admin', 'Management']), getAutoCheckoutSettings);
 
 // DELETE endpoint for admin and management to delete attendance record
 router.delete('/:id', verifyToken, roleGuard(['Admin', 'Management']), deleteAttendance);

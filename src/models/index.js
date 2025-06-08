@@ -95,6 +95,10 @@ Booking.belongsTo(BookingStatus, {
   foreignKey: 'status',
   as: 'booking_status'
 });
+Booking.hasMany(Attendance, {
+  foreignKey: 'booking_id',
+  as: 'attendances'
+});
 
 // BookingStatus relations
 BookingStatus.hasMany(Booking, {
