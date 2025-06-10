@@ -4,7 +4,8 @@ import {
   createBooking,
   updateBookingStatus,
   getAllBookings,
-  getMyBookings
+  getMyBookings,
+  deleteBooking
 } from '../controllers/booking.controller.js';
 import { verifyToken } from '../middlewares/authJwt.js';
 import roleGuard from '../middlewares/roleGuard.js';
@@ -36,5 +37,8 @@ router.get('/', roleGuard(['Admin', 'Management']), getAllBookings);
 
 // GET /api/bookings/my - Mendapatkan booking user sendiri
 router.get('/my', getMyBookings);
+
+// DELETE /api/bookings/:id - Menghapus booking (hanya admin dan management)
+router.delete('/:id', roleGuard(['Admin', 'Management']), deleteBooking);
 
 export default router;

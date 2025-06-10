@@ -246,13 +246,9 @@ export const getSummaryReport = async (req, res, next) => {
       const user = attendance.user;
       const location = attendance.location;
       const category = attendance.attendance_category;
-      const status = attendance.status;
-
-      // Format nama lengkap dengan role
-      const fullNameWithRole =
-        user && user.role
-          ? `${user.full_name} (${user.role.role_name})`
-          : user?.full_name || 'Unknown User';
+      const status = attendance.status; // Pisahkan full_name dan role
+      const fullName = user?.full_name || 'Unknown User';
+      const roleName = user?.role?.role_name || null;
 
       // Kondisi khusus untuk "alpha"
       let timeIn = attendance.time_in;
@@ -295,7 +291,8 @@ export const getSummaryReport = async (req, res, next) => {
       return {
         attendance_id: attendance.id_attendance,
         user_id: user?.id_users || null,
-        full_name: fullNameWithRole,
+        full_name: fullName,
+        role: roleName,
         nip_nim: user?.nip_nim || null,
         email: user?.email || null,
         time_in: formatTimeOnly(timeIn),

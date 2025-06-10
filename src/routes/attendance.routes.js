@@ -11,7 +11,11 @@ import {
   deleteAttendance,
   getAllAttendances,
   manualAutoCheckout,
-  getAutoCheckoutSettings
+  getAutoCheckoutSettings,
+  setupAutoCheckoutConfig,
+  processPastAttendances,
+  manualResolveWfaBookings,
+  manualCreateGeneralAlpha
 } from '../controllers/attendance.controller.js';
 import { verifyToken } from '../middlewares/authJwt.js';
 import roleGuard from '../middlewares/roleGuard.js';
@@ -36,8 +40,32 @@ router.get('/debug-checkin-time', debugCheckInTime); // Debug endpoint
 // Manual auto checkout endpoint (Admin only)
 router.post('/manual-auto-checkout', roleGuard(['Admin', 'Management']), manualAutoCheckout);
 
+// Setup auto checkout configuration and process past data (Admin only)
+router.post('/setup-auto-checkout', roleGuard(['Admin', 'Management']), setupAutoCheckoutConfig);
+
+// Process past attendance records only (Admin only)
+router.post(
+  '/process-past-attendances',
+  roleGuard(['Admin', 'Management']),
+  processPastAttendances
+);
+
 // Get auto checkout settings endpoint (for debugging)
 router.get('/auto-checkout-settings', roleGuard(['Admin', 'Management']), getAutoCheckoutSettings);
+
+// Manual resolve WFA bookings endpoint (Admin only)
+router.post(
+  '/manual-resolve-wfa-bookings',
+  roleGuard(['Admin', 'Management']),
+  manualResolveWfaBookings
+);
+
+// Manual create general alpha records endpoint (Admin only)
+router.post(
+  '/manual-create-general-alpha',
+  roleGuard(['Admin', 'Management']),
+  manualCreateGeneralAlpha
+);
 
 // DELETE endpoint for admin and management to delete attendance record
 router.delete('/:id', verifyToken, roleGuard(['Admin', 'Management']), deleteAttendance);

@@ -1,4 +1,5 @@
 import cron from 'node-cron';
+import { Op } from 'sequelize';
 
 import { Attendance, Settings } from '../models/index.js';
 import { calculateWorkHour } from '../utils/workHourFormatter.js';
@@ -20,12 +21,12 @@ const autoCheckoutJob = async () => {
       }
     });
 
-    if (!autoTimeSetting) {
-      logger.warn('Auto checkout time setting not found in database, skipping automatic checkout');
-      return;
-    }
+    // Use default time if setting not found
+    const autoTime = autoTimeSetting ? autoTimeSetting.setting_value : '17:00:00';
 
-    const autoTime = autoTimeSetting.setting_value; // e.g., "17:00:00"
+    if (!autoTimeSetting) {
+      logger.warn('Auto checkout time setting not found in database, using default: 17:00:00');
+    }
 
     // Get current Jakarta time
     const now = new Date();
@@ -42,15 +43,19 @@ const autoCheckoutJob = async () => {
     const autoTimeMinutes = timeToMinutes(autoTime);
     const currentTimeMinutes = timeToMinutes(currentTimeString);
 
-    // Auto checkout should happen within 1 minute of the set time
-    if (Math.abs(currentTimeMinutes - autoTimeMinutes) <= 1) {
+    // Auto checkout should happen within 1 minute of the set time OR process past dates
+    const isAutoCheckoutTime = Math.abs(currentTimeMinutes - autoTimeMinutes) <= 1;
+
+    if (isAutoCheckoutTime) {
       logger.info('Auto checkout time reached, processing automatic checkouts...');
 
-      // Find all users who are checked in but haven't checked out today
+      // Find all users who are checked in but haven't checked out (today and past dates)
       const activeAttendances = await Attendance.findAll({
         where: {
-          attendance_date: currentDate,
-          time_out: null // Not yet checked out
+          time_out: null, // Not yet checked out
+          attendance_date: {
+            [Op.lte]: currentDate // Today or earlier dates
+          }
         }
       });
 
@@ -61,12 +66,28 @@ const autoCheckoutJob = async () => {
 
       for (const attendance of activeAttendances) {
         try {
+          // For past dates, set checkout time to the auto checkout time of that day
+          let checkoutTime;
+          const attendanceDate = attendance.attendance_date;
+
+          if (attendanceDate === currentDate) {
+            // Today - use current Jakarta time
+            checkoutTime = jakartaTime;
+          } else {
+            // Past date - set checkout to auto time on that date
+            const [hours, minutes, seconds] = autoTime.split(':').map(Number);
+            checkoutTime = new Date(attendanceDate + 'T00:00:00.000Z');
+            checkoutTime.setUTCHours(hours, minutes, seconds, 0);
+            // Convert to Jakarta time
+            checkoutTime = new Date(checkoutTime.getTime() + jakartaOffset * 60000);
+          }
+
           // Perform automatic checkout for this user
-          await performAutoCheckout(attendance, jakartaTime);
+          await performAutoCheckout(attendance, checkoutTime);
           successCount++;
 
           logger.info(
-            `Auto checkout successful for user ${attendance.user_id}, attendance ${attendance.id_attendance}`
+            `Auto checkout successful for user ${attendance.user_id}, attendance ${attendance.id_attendance}, date: ${attendanceDate}`
           );
         } catch (error) {
           errorCount++;

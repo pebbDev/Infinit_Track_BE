@@ -17,6 +17,13 @@ import { calculateDistance } from '../utils/geofence.js';
 import { formatWorkHour, calculateWorkHour, formatTimeOnly } from '../utils/workHourFormatter.js';
 import { applySearch } from '../utils/searchHelper.js';
 import { triggerAutoCheckout } from '../jobs/autoCheckout.js';
+import { triggerResolveWfaBookings } from '../jobs/resolveWfaBookings.job.js';
+import { triggerCreateGeneralAlpha } from '../jobs/createGeneralAlpha.job.js';
+import {
+  setupAutoCheckoutAndProcessPastDates,
+  processAllPastAttendances
+} from '../utils/setupAutoCheckout.js';
+import logger from '../utils/logger.js';
 
 export const clockIn = async (req, res) => {
   try {
@@ -1093,6 +1100,121 @@ export const getAutoCheckoutSettings = async (req, res, next) => {
       }
     });
   } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Setup auto checkout configuration and process all past attendance records
+ * This endpoint will:
+ * 1. Create/update the checkout.auto_time setting in database
+ * 2. Process all past attendance records that haven't been checked out
+ */
+export const setupAutoCheckoutConfig = async (req, res, next) => {
+  try {
+    // Only allow admins to setup auto checkout
+    if (req.user.role_name !== 'Admin' && req.user.role_name !== 'Management') {
+      return res.status(403).json({
+        success: false,
+        message:
+          'Akses ditolak. Hanya admin dan manajemen yang dapat mengatur konfigurasi auto checkout.'
+      });
+    }
+
+    const result = await setupAutoCheckoutAndProcessPastDates();
+
+    res.status(200).json({
+      success: true,
+      message: 'Konfigurasi auto checkout berhasil diatur dan data masa lalu telah diproses.',
+      data: result
+    });
+  } catch (error) {
+    logger.error('Error setting up auto checkout configuration:', error);
+    next(error);
+  }
+};
+
+/**
+ * Process all past attendance records for auto checkout (without changing settings)
+ */
+export const processPastAttendances = async (req, res, next) => {
+  try {
+    // Only allow admins to process past attendances
+    if (req.user.role_name !== 'Admin' && req.user.role_name !== 'Management') {
+      return res.status(403).json({
+        success: false,
+        message:
+          'Akses ditolak. Hanya admin dan manajemen yang dapat memproses data attendance masa lalu.'
+      });
+    }
+
+    const result = await processAllPastAttendances();
+
+    res.status(200).json({
+      success: true,
+      message: 'Pemrosesan data attendance masa lalu berhasil completed.',
+      data: result
+    });
+  } catch (error) {
+    logger.error('Error processing past attendances:', error);
+    next(error);
+  }
+};
+
+/**
+ * Manual trigger for resolve unused WFA bookings job (Admin only)
+ * This endpoint allows admins to manually trigger the WFA bookings resolver
+ * for testing purposes or to handle missed daily runs
+ */
+export const manualResolveWfaBookings = async (req, res, next) => {
+  try {
+    // Only allow admins to trigger manual resolve
+    if (req.user.role_name !== 'Admin' && req.user.role_name !== 'Management') {
+      return res.status(403).json({
+        success: false,
+        message:
+          'Akses ditolak. Hanya admin dan manajemen yang dapat menjalankan resolve WFA bookings secara manual.'
+      });
+    }
+
+    const result = await triggerResolveWfaBookings();
+
+    res.status(200).json({
+      success: true,
+      message: 'Resolve unused WFA bookings job berhasil dijalankan secara manual.',
+      data: result
+    });
+  } catch (error) {
+    logger.error('Error in manual resolve WFA bookings:', error);
+    next(error);
+  }
+};
+
+/**
+ * Manual trigger for create general alpha records job (Admin only)
+ * This endpoint allows admins to manually trigger the general alpha creator
+ * for testing purposes or to handle missed daily runs
+ */
+export const manualCreateGeneralAlpha = async (req, res, next) => {
+  try {
+    // Only allow admins to trigger manual alpha creation
+    if (req.user.role_name !== 'Admin' && req.user.role_name !== 'Management') {
+      return res.status(403).json({
+        success: false,
+        message:
+          'Akses ditolak. Hanya admin dan manajemen yang dapat menjalankan pembuatan alpha records secara manual.'
+      });
+    }
+
+    const result = await triggerCreateGeneralAlpha();
+
+    res.status(200).json({
+      success: true,
+      message: 'Create general alpha records job berhasil dijalankan secara manual.',
+      data: result
+    });
+  } catch (error) {
+    logger.error('Error in manual create general alpha:', error);
     next(error);
   }
 };

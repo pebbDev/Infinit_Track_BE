@@ -1,5 +1,7 @@
+import { Op } from 'sequelize';
+
 import sequelize from '../config/database.js';
-import { Booking, Location, BookingStatus, User, Position } from '../models/index.js';
+import { Booking, Location, BookingStatus, User, Position, Role } from '../models/index.js';
 
 // BAGIAN 1: Endpoint Membuat Booking (POST /api/bookings)
 export const createBooking = async (req, res, next) => {
@@ -27,9 +29,7 @@ export const createBooking = async (req, res, next) => {
         success: false,
         message: 'Tanggal booking harus hari esok atau setelahnya.'
       });
-    }
-
-    // Cek apakah user sudah memiliki booking pending
+    } // Cek apakah user sudah memiliki booking pending
     const existingPendingBooking = await Booking.findOne({
       where: {
         user_id: userId,
@@ -43,6 +43,25 @@ export const createBooking = async (req, res, next) => {
       return res.status(400).json({
         success: false,
         message: 'Anda sudah memiliki pengajuan booking yang aktif.'
+      });
+    }
+
+    // Cek booking conflict pada tanggal yang sama (WFA vs WFO/WFH)
+    const existingBookingOnDate = await Booking.findOne({
+      where: {
+        user_id: userId,
+        schedule_date: scheduleDate.toISOString().split('T')[0],
+        status: { [Op.in]: [1, 3] } // approved (1) atau pending (3)
+      },
+      transaction
+    });
+
+    if (existingBookingOnDate) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        message:
+          'Anda sudah memiliki booking pada tanggal tersebut. Tidak dapat membuat duplikat booking pada hari yang sama.'
       });
     }
 
@@ -226,9 +245,7 @@ export const getAllBookings = async (req, res, next) => {
         pending: 3
       };
       whereClause.status = statusMap[status];
-    }
-
-    // Lakukan Query ke Database dengan include yang lengkap
+    } // Lakukan Query ke Database dengan include yang lengkap
     const bookings = await Booking.findAndCountAll({
       where: whereClause,
       include: [
@@ -241,6 +258,11 @@ export const getAllBookings = async (req, res, next) => {
               model: Position,
               as: 'position',
               attributes: ['position_name']
+            },
+            {
+              model: Role,
+              as: 'role',
+              attributes: ['id_roles', 'role_name']
             }
           ]
         },
@@ -255,7 +277,12 @@ export const getAllBookings = async (req, res, next) => {
           attributes: ['name_status']
         }
       ],
-      order: [['created_at', 'DESC']],
+      order: [
+        // Urutan kustom untuk status: 3 (pending), 1 (approved), 2 (rejected)
+        [sequelize.fn('FIELD', sequelize.col('status'), 3, 1, 2)],
+        // Urutan sekunder: data terbaru di atas dalam setiap grup status
+        ['created_at', 'DESC']
+      ],
       limit: parseInt(limit),
       offset: parseInt(offset),
       distinct: true // Important for correct count with includes
@@ -264,6 +291,7 @@ export const getAllBookings = async (req, res, next) => {
       booking_id: booking.booking_id,
       user_id: booking.user.id_users,
       user_full_name: booking.user.full_name,
+      user_role_name: booking.user.role ? booking.user.role.role_name : null,
       user_email: booking.user.email,
       user_nip_nim: booking.user.nip_nim,
       user_position_name: booking.user.position ? booking.user.position.position_name : null,
@@ -307,10 +335,26 @@ export const getMyBookings = async (req, res, next) => {
     const userId = req.user.id;
     const { page = 1, limit = 10 } = req.query;
     const offset = (page - 1) * limit;
-
     const bookings = await Booking.findAndCountAll({
       where: { user_id: userId },
       include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id_users', 'full_name', 'email', 'nip_nim'],
+          include: [
+            {
+              model: Position,
+              as: 'position',
+              attributes: ['position_name']
+            },
+            {
+              model: Role,
+              as: 'role',
+              attributes: ['id_roles', 'role_name']
+            }
+          ]
+        },
         {
           model: Location,
           as: 'location'
@@ -324,12 +368,34 @@ export const getMyBookings = async (req, res, next) => {
       order: [['created_at', 'DESC']],
       limit: parseInt(limit),
       offset: parseInt(offset)
-    });
+    }); // Transform data untuk konsistensi dengan getAllBookings
+    const transformedBookings = bookings.rows.map((booking) => ({
+      booking_id: booking.booking_id,
+      user_id: booking.user.id_users,
+      user_full_name: booking.user.full_name,
+      user_email: booking.user.email,
+      user_nip_nim: booking.user.nip_nim,
+      user_position_name: booking.user.position ? booking.user.position.position_name : null,
+      user_role_name: booking.user.role ? booking.user.role.role_name : null,
+      schedule_date: booking.schedule_date,
+      status: booking.booking_status.name_status,
+      location: {
+        location_id: booking.location.location_id,
+        latitude: parseFloat(booking.location.latitude),
+        longitude: parseFloat(booking.location.longitude),
+        radius: parseFloat(booking.location.radius),
+        description: booking.location.description
+      },
+      notes: booking.notes,
+      created_at: booking.created_at,
+      processed_at: booking.processed_at,
+      approved_by: booking.approved_by
+    }));
 
     res.status(200).json({
       success: true,
       data: {
-        bookings: bookings.rows,
+        bookings: transformedBookings,
         pagination: {
           current_page: parseInt(page),
           total_pages: Math.ceil(bookings.count / limit),
@@ -339,6 +405,54 @@ export const getMyBookings = async (req, res, next) => {
       }
     });
   } catch (error) {
+    next(error);
+  }
+};
+
+// BAGIAN 4: Endpoint Menghapus Booking (DELETE /api/bookings/{id})
+export const deleteBooking = async (req, res, next) => {
+  const t = await sequelize.transaction();
+
+  try {
+    // Langkah 1: Dapatkan ID dari Parameter URL
+    const { id } = req.params;
+
+    // Langkah 2: Cari Record Booking
+    const bookingRecord = await Booking.findByPk(id, { transaction: t });
+
+    // Langkah 3: Handle Jika Data Tidak Ditemukan
+    if (!bookingRecord) {
+      await t.rollback();
+      return res.status(404).json({
+        success: false,
+        message: 'Data booking tidak ditemukan.'
+      });
+    }
+
+    // Langkah 4: Simpan location_id Terkait
+    const locationIdToDelete = bookingRecord.location_id;
+
+    // Langkah 5: Hapus Record Booking
+    await bookingRecord.destroy({ transaction: t });
+
+    // Langkah 6: Hapus Record Lokasi Terkait
+    if (locationIdToDelete) {
+      await Location.destroy({
+        where: { location_id: locationIdToDelete },
+        transaction: t
+      });
+    }
+
+    // Langkah 7: Commit Transaksi
+    await t.commit();
+
+    // Langkah 8: Kirim Respons Sukses
+    res.status(200).json({
+      success: true,
+      message: 'Data booking berhasil dihapus.'
+    });
+  } catch (error) {
+    await t.rollback();
     next(error);
   }
 };
