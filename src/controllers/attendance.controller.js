@@ -16,7 +16,7 @@ import {
 import { calculateDistance } from '../utils/geofence.js';
 import { formatWorkHour, calculateWorkHour, formatTimeOnly } from '../utils/workHourFormatter.js';
 import { applySearch } from '../utils/searchHelper.js';
-import { triggerAutoCheckout } from '../jobs/autoCheckout.js';
+import { triggerAutoCheckout } from '../jobs/autoCheckout.job.js';
 import { triggerResolveWfaBookings } from '../jobs/resolveWfaBookings.job.js';
 import { triggerCreateGeneralAlpha } from '../jobs/createGeneralAlpha.job.js';
 import {
@@ -92,40 +92,177 @@ export const clockOut = async (req, res) => {
 export const getAttendanceHistory = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { page = 1, limit = 5 } = req.query;
+    const { period = 'daily', page = 1, limit = 5 } = req.query;
 
     // Calculate offset for pagination
     const offset = (parseInt(page) - 1) * parseInt(limit);
 
-    // Query with rich response includes
-    const attendanceData = await Attendance.findAndCountAll({
-      where: { user_id: userId },
-      include: [
-        {
-          model: AttendanceCategory,
-          as: 'attendance_category',
-          attributes: ['category_name']
-        },
-        {
-          model: AttendanceStatus,
-          as: 'status',
-          attributes: ['attendance_status_name']
-        },
-        {
-          model: Location,
-          as: 'location',
-          attributes: ['description'],
-          required: false
-        }
-      ],
-      order: [['attendance_date', 'DESC']],
-      limit: parseInt(limit),
-      offset: offset
-    }); // Transform data response
+    // Get current Jakarta time
+    const now = new Date();
+    const jakartaOffset = 7 * 60; // UTC+7 in minutes
+    const jakartaTime = new Date(now.getTime() + jakartaOffset * 60000);
+
+    // Determine date range based on period
+    let startDate, endDate;
+    let whereClause = { user_id: userId };
+    switch (period) {
+      case 'daily': {
+        // Start and end of today
+        startDate = new Date(jakartaTime);
+        startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(jakartaTime);
+        endDate.setHours(23, 59, 59, 999);
+        break;
+      }
+
+      case 'weekly': {
+        // Start of this week (Monday) to end of this week (Sunday)
+        const dayOfWeek = jakartaTime.getDay();
+        const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // Handle Sunday as 0
+
+        startDate = new Date(jakartaTime);
+        startDate.setDate(jakartaTime.getDate() + diffToMonday);
+        startDate.setHours(0, 0, 0, 0);
+
+        endDate = new Date(startDate);
+        endDate.setDate(startDate.getDate() + 6);
+        endDate.setHours(23, 59, 59, 999);
+        break;
+      }
+
+      case 'monthly': {
+        // Start and end of current month
+        startDate = new Date(jakartaTime.getFullYear(), jakartaTime.getMonth(), 1);
+        endDate = new Date(jakartaTime.getFullYear(), jakartaTime.getMonth() + 1, 0);
+        endDate.setHours(23, 59, 59, 999);
+        break;
+      }
+
+      case 'all':
+        // No date filter
+        break;
+
+      default:
+        return res.status(400).json({
+          success: false,
+          message: 'Period parameter tidak valid. Gunakan: daily, weekly, monthly, atau all'
+        });
+    } // Add date filter if not 'all'
+    if (period !== 'all') {
+      whereClause.attendance_date = {
+        [Op.between]: [startDate.toISOString().split('T')[0], endDate.toISOString().split('T')[0]]
+      };
+    }
+
+    // Run queries in parallel for efficiency
+    const [summaryByStatus, summaryByCategory, attendanceData] = await Promise.all([
+      // Query 1: Summary by status
+      Attendance.findAll({
+        where: whereClause,
+        attributes: ['status_id', [sequelize.fn('COUNT', sequelize.col('status_id')), 'count']],
+        group: ['status_id'],
+        raw: true
+      }),
+
+      // Query 2: Summary by category
+      Attendance.findAll({
+        where: whereClause,
+        attributes: ['category_id', [sequelize.fn('COUNT', sequelize.col('category_id')), 'count']],
+        group: ['category_id'],
+        raw: true
+      }),
+
+      // Query 3: Detailed attendance list with pagination
+      Attendance.findAndCountAll({
+        where: whereClause,
+        include: [
+          {
+            model: AttendanceCategory,
+            as: 'attendance_category',
+            attributes: ['category_name']
+          },
+          {
+            model: AttendanceStatus,
+            as: 'status',
+            attributes: ['attendance_status_name']
+          },
+          {
+            model: Location,
+            as: 'location',
+            attributes: ['description'],
+            required: false
+          }
+        ],
+        order: [['attendance_date', 'DESC']],
+        limit: parseInt(limit),
+        offset: offset
+      })
+    ]); // Process summary data
+    const summary = {
+      total_ontime: 0,
+      total_late: 0,
+      total_alpha: 0,
+      total_wfo: 0,
+      total_wfa: 0
+    }; // Map status counts (assuming: 1=ontime, 2=late, 3=alpha)
+    summaryByStatus.forEach((item) => {
+      const count = parseInt(item.count);
+
+      switch (item.status_id) {
+        case 1:
+          summary.total_ontime = count;
+          break;
+        case 2:
+          summary.total_late = count;
+          break;
+        case 3:
+          summary.total_alpha = count;
+          break;
+      }
+    });
+
+    // Map category counts (assuming: 1=WFO, 3=WFA)
+    summaryByCategory.forEach((item) => {
+      const count = parseInt(item.count);
+
+      switch (item.category_id) {
+        case 1:
+          summary.total_wfo = count;
+          break;
+        case 3:
+          summary.total_wfa = count;
+          break;
+      }
+    }); // Transform attendance data
     const transformedData = attendanceData.rows.map((att) => {
+      // Parse attendance date
+      const attendanceDate = new Date(att.attendance_date);
+
+      // Format date components
+      const day = attendanceDate.getDate().toString().padStart(2, '0');
+      const months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec'
+      ];
+      const month = months[attendanceDate.getMonth()];
+      const year = attendanceDate.getFullYear();
+      const monthYear = `${month} ${year}`;
+
       return {
         id_attendance: att.id_attendance,
         attendance_date: att.attendance_date,
+        date: day,
+        monthYear: monthYear,
         time_in: formatTimeOnly(att.time_in),
         time_out: formatTimeOnly(att.time_out),
         work_hour: formatWorkHour(att.work_hour),
@@ -142,6 +279,7 @@ export const getAttendanceHistory = async (req, res) => {
     res.status(200).json({
       success: true,
       data: {
+        summary,
         attendances: transformedData,
         pagination: {
           current_page: parseInt(page),
@@ -155,6 +293,7 @@ export const getAttendanceHistory = async (req, res) => {
       message: 'Riwayat absensi berhasil diambil'
     });
   } catch (error) {
+    logger.error('Error in getAttendanceHistory:', error);
     res.status(500).json({
       success: false,
       message: 'Server error',
@@ -683,15 +822,17 @@ export const getAttendanceStatus = async (req, res, next) => {
       currentTimeMinutes <= checkinEndMinutes;
 
     // Tentukan can_check_out
-    const can_check_out = currentAttendance && !currentAttendance.time_out;
-
-    // Bentuk respons
+    const can_check_out = currentAttendance && !currentAttendance.time_out; // Bentuk respons
     const response = {
       success: true,
       data: {
         can_check_in,
         can_check_out,
         checked_in_at: currentAttendance ? formatTimeOnly(currentAttendance.time_in) : null,
+        checked_out_at:
+          currentAttendance && currentAttendance.time_out
+            ? formatTimeOnly(currentAttendance.time_out)
+            : null,
         active_mode,
         active_location,
         today_date: todayDate,

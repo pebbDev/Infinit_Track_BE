@@ -189,11 +189,16 @@ export const uploadUserPhoto = async (req, res, next) => {
       if (oldPhoto && oldPhoto.public_id) {
         oldPublicId = oldPhoto.public_id;
       }
-    }
-
-    // Upload to Cloudinary
+    } // Upload to Cloudinary
     const uploadToCloudinary = (fileBuffer) => {
       return new Promise((resolve, reject) => {
+        // Debug logging for cloudinary config
+        logger.info('Cloudinary config check in controller:', {
+          cloud_name: process.env.CLOUDINARY_CLOUD_NAME ? 'SET' : 'MISSING',
+          api_key: process.env.CLOUDINARY_API_KEY ? 'SET' : 'MISSING',
+          api_secret: process.env.CLOUDINARY_API_SECRET ? 'SET' : 'MISSING'
+        });
+
         const uploadStream = cloudinary.uploader.upload_stream(
           {
             resource_type: 'image',
