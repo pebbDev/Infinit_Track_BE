@@ -6,6 +6,7 @@ import usersRoutes from './users.routes.js';
 import referenceDataRoutes from './referenceData.routes.js';
 import bookingRoutes from './booking.routes.js';
 import summaryRoutes from './summary.routes.js';
+import wfaRoutes from './wfa.routes.js';
 
 const router = express.Router();
 
@@ -16,6 +17,7 @@ router.use('/api/users', usersRoutes);
 router.use('/api/summary', summaryRoutes);
 router.use('/api', referenceDataRoutes);
 router.use('/api/bookings', bookingRoutes);
+router.use('/api/wfa', wfaRoutes);
 
 // Health check
 router.get('/health', (req, res) => {

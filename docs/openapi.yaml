@@ -403,10 +403,369 @@ paths:
                 properties:
                   success:
                     type: boolean
-                    example: false
-                  message:
+                    example: false                  message:
                     type: string
                     example: "Terjadi kesalahan pada server"
+  /api/wfa/recommendations:
+    get:
+      summary: Get WFA (Work From Anywhere) recommendations
+      description: |
+        Mendapatkan rekomendasi tempat untuk bekerja berdasarkan lokasi pengguna.
+        Menggunakan algoritma Balanced Scoring yang menggabungkan:
+        - Jenis tempat (50%): Kesesuaian kategori untuk bekerja
+        - Internet (30%): Ketersediaan WiFi/koneksi internet  
+        - Jarak (20%): Jarak dari lokasi pengguna
+      tags:
+        - WFA (Work From Anywhere)
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          schema:
+            type: number
+            minimum: -90
+            maximum: 90
+          description: Latitude lokasi pengguna
+          example: -0.84208
+        - name: lng
+          in: query
+          required: true
+          schema:
+            type: number
+            minimum: -180
+            maximum: 180
+          description: Longitude lokasi pengguna
+          example: 119.89264
+      responses:
+        200:
+          description: Rekomendasi berhasil didapatkan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      recommendations:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            name:
+                              type: string
+                              description: Nama tempat
+                              example: "Kopi Kebangsaan Cafe"
+                            address:
+                              type: string
+                              description: Alamat lengkap
+                              example: "Jalan Diponegoro No. 15, Palu, Central Sulawesi"
+                            latitude:
+                              type: number
+                              description: Koordinat latitude
+                              example: -0.8421
+                            longitude:
+                              type: number
+                              description: Koordinat longitude
+                              example: 119.8926
+                            suitability_score:
+                              type: number
+                              minimum: 0
+                              maximum: 100
+                              description: Skor kesesuaian (0-100)
+                              example: 87.5
+                            suitability_label:
+                              type: string
+                              enum: ["Sangat Direkomendasikan", "Baik", "Cukup", "Kurang Sesuai", "Tidak Direkomendasikan"]
+                              description: Label kategori kesesuaian
+                              example: "Sangat Direkomendasikan"
+                            category:
+                              type: string
+                              enum: ["cafe", "coworking", "library", "hotel", "restaurant", "other"]
+                              description: Kategori tempat
+                              example: "cafe"
+                            distance_from_center:
+                              type: integer
+                              minimum: 0
+                              description: Jarak dari user dalam meter
+                              example: 250
+                            score_details:
+                              type: object
+                              description: Detail breakdown scoring untuk debugging
+                              properties:
+                                final_score:
+                                  type: number
+                                  example: 87.5
+                                component_scores:
+                                  type: object
+                                  properties:
+                                    type_score:
+                                      type: integer
+                                      example: 100
+                                    internet_score:
+                                      type: integer
+                                      example: 75
+                                    distance_score:
+                                      type: integer
+                                      example: 95
+                                    raw_score:
+                                      type: number
+                                      example: 87.5
+                                    fuzzy_enhancement:
+                                      type: number
+                                      example: 1.05
+                                evaluations:
+                                  type: object
+                                  properties:
+                                    type:
+                                      type: string
+                                      example: "cafe"
+                                    internet:
+                                      type: string
+                                      example: "assumed_wifi"
+                                    distance:
+                                      type: string
+                                      example: "very_close"
+                                weights_used:
+                                  type: object
+                                  properties:
+                                    type:
+                                      type: number
+                                      example: 0.5
+                                    internet:
+                                      type: number
+                                      example: 0.3
+                                    distance:
+                                      type: number
+                                      example: 0.2
+                      search_criteria:
+                        type: object
+                        properties:
+                          center_latitude:
+                            type: number
+                            example: -0.84208
+                          center_longitude:
+                            type: number
+                            example: 119.89264
+                          search_radius_meters:
+                            type: integer
+                            example: 5000
+                          categories_searched:
+                            type: array
+                            items:
+                              type: string
+                            example: ["office.coworking", "education.library", "catering.cafe", "accommodation.hotel"]
+                          total_candidates_found:
+                            type: integer
+                            example: 15
+                          recommendations_returned:
+                            type: integer
+                            example: 10
+                      fuzzy_ahp_methodology:
+                        type: object
+                        properties:
+                          approach:
+                            type: string
+                            example: "Balanced Scoring - Realistic and Forgiving Algorithm"
+                          weights_used:
+                            type: object
+                            properties:
+                              type:
+                                type: number
+                                example: 0.5
+                              internet:
+                                type: number
+                                example: 0.3
+                              distance:
+                                type: number
+                                example: 0.2
+                          scoring_ranges:
+                            type: object
+                            properties:
+                              type:
+                                type: string
+                                example: "30-100 (based on place category)"
+                              internet:
+                                type: string
+                                example: "30-100 (based on availability and place type)"
+                              distance:
+                                type: string
+                                example: "20-100 (gradual decrease with distance)"
+                  message:
+                    type: string
+                    example: "Rekomendasi WFA berhasil diambil menggunakan Balanced Scoring Algorithm"
+        400:
+          description: Bad Request - Parameter tidak valid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  code:
+                    type: string
+                    enum: ["E_VALIDATION"]
+                    example: "E_VALIDATION"
+                  message:
+                    type: string
+                    examples:
+                      missing_params:
+                        value: "Parameter lat dan lng wajib diisi"
+                      invalid_format:
+                        value: "Format koordinat tidak valid"
+                      out_of_range:
+                        value: "Latitude harus antara -90 dan 90"
+        401:
+          description: Unauthorized - Token tidak valid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  code:
+                    type: string
+                    example: "E_UNAUTHORIZED"
+                  message:
+                    type: string
+                    example: "Token tidak valid atau sudah kedaluwarsa"
+        408:
+          description: Request Timeout
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  code:
+                    type: string
+                    example: "E_TIMEOUT"
+                  message:
+                    type: string
+                    example: "Request timeout - Layanan Geoapify membutuhkan waktu terlalu lama untuk merespons. Silakan coba lagi."
+        429:
+          description: Too Many Requests
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  code:
+                    type: string
+                    example: "E_RATE_LIMIT"
+                  message:
+                    type: string
+                    example: "Terlalu banyak permintaan ke API Geoapify, coba lagi dalam beberapa menit"
+        500:
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  code:
+                    type: string
+                    enum: ["E_CONFIG", "E_API_KEY"]
+                    example: "E_CONFIG"
+                  message:
+                    type: string
+                    examples:
+                      config_error:
+                        value: "API key Geoapify tidak ditemukan"
+                      api_key_error:
+                        value: "API key Geoapify tidak valid atau tidak memiliki akses"
+        503:
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  code:
+                    type: string
+                    enum: ["E_SERVICE_UNAVAILABLE", "E_EXTERNAL_SERVER"]
+                    example: "E_SERVICE_UNAVAILABLE"
+                  message:
+                    type: string
+                    examples:
+                      service_unavailable:
+                        value: "Layanan Geoapify sedang tidak tersedia"
+                      external_server:
+                        value: "Server Geoapify mengalami masalah internal"
+  /api/wfa/ahp-config:
+    get:
+      summary: Get AHP configuration for WFA recommendations
+      description: Mendapatkan konfigurasi algoritma dan bobot kriteria yang digunakan
+      tags:
+        - WFA (Work From Anywhere)
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        200:
+          description: Konfigurasi berhasil didapatkan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      current_weights:
+                        type: object
+                        properties:
+                          type:
+                            type: number
+                            example: 0.5
+                          internet:
+                            type: number
+                            example: 0.3
+                          distance:
+                            type: number
+                            example: 0.2
+                      method:
+                        type: string
+                        example: "Balanced Scoring Algorithm"
+                      criteria_explanation:
+                        type: object
+                        properties:
+                          type:
+                            type: string
+                            example: "Kesesuaian jenis tempat untuk bekerja"
+                          internet:
+                            type: string
+                            example: "Ketersediaan akses internet/WiFi"
+                          distance:
+                            type: string
+                            example: "Jarak dari lokasi pengguna"
+                  message:
+                    type: string
+                    example: "Konfigurasi berhasil diambil"
 components:
   securitySchemes:
     cookieAuth:
