@@ -162,7 +162,7 @@ export const getAllUsers = async (req, res, next) => {
 };
 
 // POST /users/:id/photo - Admin Upload Foto Wajah User
-export const uploadUserPhoto = async (req, res) => {
+export const uploadUserPhoto = async (req, res, next) => {
   try {
     const { id } = req.params;
 
@@ -183,18 +183,39 @@ export const uploadUserPhoto = async (req, res) => {
       });
     }
 
+    // Get old photo data for deletion
+    let oldPhotoFilePath = null;
+    let oldPhotoDeleted = false;
+
+    if (user.id_photos) {
+      const oldPhoto = await Photo.findByPk(user.id_photos);
+      if (oldPhoto && oldPhoto.file_path) {
+        oldPhotoFilePath = oldPhoto.file_path;
+      }
+    }
+
     // Create uploads/face directory if it doesn't exist
     const uploadsDir = path.join(process.cwd(), 'uploads', 'face');
     if (!fs.existsSync(uploadsDir)) {
       fs.mkdirSync(uploadsDir, { recursive: true });
-    }
-
-    // Generate unique filename
+    } // Generate unique filename
     const timestamp = Date.now();
     const filename = `face-${timestamp}-${Math.floor(Math.random() * 1000000)}.jpg`;
-    const filePath = path.join(uploadsDir, filename);
+    const finalFilePath = path.join(uploadsDir, filename);
     const relativePath = `uploads/face/${filename}`;
-    await sharp(req.file.buffer).resize(300, 300).jpeg({ quality: 80 }).toFile(filePath);
+
+    // Process image with Sharp - read from temp file, write to final location
+    await sharp(req.file.path).resize(300, 300).jpeg({ quality: 80 }).toFile(finalFilePath);
+
+    // Clean up temporary file uploaded by Multer (after Sharp processing)
+    try {
+      if (fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+        logger.info(`Temporary file cleaned up: ${req.file.path}`);
+      }
+    } catch (cleanupError) {
+      logger.warn(`Failed to cleanup temporary file ${req.file.path}: ${cleanupError.message}`);
+    }
 
     // Create or update photo record
     let photo = await Photo.findOne({ where: { user_id: id } });
@@ -217,24 +238,37 @@ export const uploadUserPhoto = async (req, res) => {
       await user.update({
         id_photos: photo.id_photos
       });
+    } // Delete old photo file if exists
+    if (oldPhotoFilePath) {
+      try {
+        const fullOldPath = path.join(process.cwd(), oldPhotoFilePath);
+        if (fs.existsSync(fullOldPath)) {
+          fs.unlinkSync(fullOldPath);
+          oldPhotoDeleted = true;
+          logger.info(`Old photo deleted: ${oldPhotoFilePath}`);
+        }
+      } catch (deleteError) {
+        logger.warn(`Failed to delete old photo ${oldPhotoFilePath}: ${deleteError.message}`);
+        oldPhotoDeleted = false;
+      }
     }
 
     logger.info(`Photo uploaded for user ${id}: ${relativePath}`);
 
     res.json({
       success: true,
-      message: 'Foto wajah berhasil diperbarui',
+      message: 'Foto berhasil diperbarui',
       data: {
-        photo_path: relativePath,
-        photo_id: photo.id_photos
+        user_id: parseInt(id, 10),
+        photo_id: photo.id_photos,
+        photo: relativePath,
+        photo_updated_at: photo.photo_updated_at,
+        old_photo_deleted: oldPhotoDeleted
       }
     });
   } catch (error) {
     logger.error(`Error uploading user photo: ${error.message}`, { stack: error.stack });
-    res.status(500).json({
-      success: false,
-      message: 'Terjadi kesalahan pada server'
-    });
+    next(error);
   }
 };
 
@@ -294,10 +328,8 @@ export const updateUser = async (req, res, next) => {
     if (id_programs !== undefined) updateData.id_programs = id_programs;
     if (id_position !== undefined) updateData.id_position = id_position;
     if (id_divisions !== undefined) updateData.id_divisions = id_divisions;
-    if (id_photos !== undefined) updateData.id_photos = id_photos;
-
-    // Hash password if provided
-    if (password) {
+    if (id_photos !== undefined) updateData.id_photos = id_photos; // Hash password if provided
+    if (password && password.trim()) {
       updateData.password = await bcrypt.hash(password, 10);
     }
 
@@ -663,6 +695,110 @@ export const createUser = async (req, res, next) => {
   } catch (error) {
     await transaction.rollback();
     logger.error(`Error creating user: ${error.message}`, { stack: error.stack });
+    next(error);
+  }
+};
+
+// GET /users/:id - Get User by ID (Admin and Management only)
+export const getUserById = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    // Find user by ID with all required associations
+    const user = await User.findOne({
+      where: {
+        id_users: id,
+        deleted_at: null
+      },
+      include: [
+        {
+          model: Role,
+          as: 'role',
+          attributes: ['role_name']
+        },
+        {
+          model: Program,
+          as: 'program',
+          attributes: ['program_name']
+        },
+        {
+          model: Position,
+          as: 'position',
+          attributes: ['position_name']
+        },
+        {
+          model: Division,
+          as: 'division',
+          attributes: ['division_name'],
+          required: false
+        },
+        {
+          model: Photo,
+          as: 'photo_file',
+          attributes: ['file_path', 'photo_updated_at'],
+          required: false
+        },
+        {
+          model: Location,
+          as: 'wfh_location',
+          where: { id_attendance_categories: 2 },
+          include: [
+            {
+              model: AttendanceCategory,
+              as: 'attendance_category',
+              attributes: ['category_name']
+            }
+          ],
+          required: true
+        }
+      ]
+    });
+
+    // Check if user exists
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        code: 'E_NOT_FOUND',
+        message: 'User not found'
+      });
+    }
+
+    // Transform data to match the response structure from /auth/me endpoint
+    const transformedUser = {
+      id: user.id_users,
+      full_name: user.full_name,
+      email: user.email,
+      role_name: user.role ? user.role.role_name : null,
+      position_name: user.position ? user.position.position_name : null,
+      program_name: user.program ? user.program.program_name : null,
+      division_name: user.division ? user.division.division_name : null,
+      nip_nim: user.nip_nim,
+      phone: user.phone,
+      photo: user.photo_file ? user.photo_file.file_path : null,
+      photo_updated_at: user.photo_file ? user.photo_file.photo_updated_at : null,
+      location: user.wfh_location
+        ? {
+            location_id: user.wfh_location.location_id,
+            latitude: parseFloat(user.wfh_location.latitude),
+            longitude: parseFloat(user.wfh_location.longitude),
+            radius: parseFloat(user.wfh_location.radius),
+            description: user.wfh_location.description,
+            category_name: user.wfh_location.attendance_category
+              ? user.wfh_location.attendance_category.category_name
+              : 'Work From Home'
+          }
+        : null
+    };
+
+    logger.info(`User ${id} details fetched successfully by user ${req.user.id}`);
+
+    res.json({
+      success: true,
+      data: transformedUser,
+      message: 'User details fetched successfully'
+    });
+  } catch (error) {
+    logger.error(`Error fetching user ${req.params.id}: ${error.message}`, { stack: error.stack });
     next(error);
   }
 };

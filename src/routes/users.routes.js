@@ -3,11 +3,12 @@ import express from 'express';
 import {
   createUser,
   getAllUsers,
+  getUserById,
   uploadUserPhoto,
   updateUser,
   deleteUser
 } from '../controllers/user.controller.js';
-import { verifyToken, requireAdmin } from '../middlewares/authJwt.js';
+import { verifyToken } from '../middlewares/authJwt.js';
 import roleGuard from '../middlewares/roleGuard.js';
 import {
   validateUpdateUser,
@@ -21,6 +22,9 @@ const router = express.Router();
 // GET /users - Get all users with full profile details (admin and management only)
 router.get('/', verifyToken, roleGuard(['Admin', 'Management']), getAllUsers);
 
+// GET /users/:id - Get user by ID with full profile details (admin and management only)
+router.get('/:id', verifyToken, roleGuard(['Admin', 'Management']), getUserById);
+
 // POST /users - Create new user (admin and management only)
 router.post(
   '/',
@@ -32,8 +36,14 @@ router.post(
   createUser
 );
 
-// POST /users/:id/photo - Admin Upload Foto Wajah User (admin only)
-router.post('/:id/photo', verifyToken, requireAdmin, upload.single('photo'), uploadUserPhoto);
+// POST /users/:id/photo - Admin Upload Foto Wajah User (admin and management only)
+router.post(
+  '/:id/photo',
+  verifyToken,
+  roleGuard(['Admin', 'Management']),
+  upload.single('face_photo'),
+  uploadUserPhoto
+);
 
 // PATCH /users/:id - Update user (admin and management only)
 router.patch(
