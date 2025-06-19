@@ -1,7 +1,14 @@
 import { Op } from 'sequelize';
 import Holidays from 'date-holidays';
 
-import { Attendance, Booking, Location, Settings, AttendanceCategory, BookingStatus } from '../models/index.js';
+import {
+  Attendance,
+  Booking,
+  Location,
+  Settings,
+  AttendanceCategory,
+  BookingStatus
+} from '../models/index.js';
 
 export const clockIn = async (req, res) => {
   try {
@@ -95,20 +102,20 @@ const WFO_LOCATION = {
   latitude: -6.2088,
   longitude: 106.8456,
   radius: 100,
-  description: "Kantor Pusat Jakarta",
-  address: "Jl. Sudirman No. 1, Jakarta Pusat"
+  description: 'Kantor Pusat Jakarta',
+  address: 'Jl. Sudirman No. 1, Jakarta Pusat'
 };
 
 export const getAttendanceStatus = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    
+
     // Definisikan "Hari Ini" dengan timezone Asia/Jakarta
     const today = new Date();
     const jakartaOffset = 7 * 60; // UTC+7 dalam menit
-    const localTime = new Date(today.getTime() + (jakartaOffset * 60000));
+    const localTime = new Date(today.getTime() + jakartaOffset * 60000);
     const todayDate = localTime.toISOString().split('T')[0]; // YYYY-MM-DD format
-    
+
     // Ambil pengaturan dari database
     const settings = await Settings.findAll({
       where: {
@@ -122,25 +129,25 @@ export const getAttendanceStatus = async (req, res, next) => {
         }
       }
     });
-    
+
     // Convert settings array ke object untuk kemudahan akses
     const settingsMap = {};
-    settings.forEach(setting => {
+    settings.forEach((setting) => {
       settingsMap[setting.setting_key] = setting.setting_value;
     });
-    
+
     // Set default values jika setting tidak ditemukan
     const checkinStartTime = settingsMap['checkin.start_time'] || '08:00:00';
     const checkoutAutoTime = settingsMap['checkout.auto_time'] || '17:00:00';
     const holidayCheckinEnabled = settingsMap['workday.holiday_checkin_enabled'] === 'true';
     const holidayRegion = settingsMap['workday.holiday_region'] || 'ID'; // Indonesia
-    
+
     // Cek hari libur menggunakan date-holidays
     const hd = new Holidays(holidayRegion);
     const isHoliday = hd.isHoliday(localTime);
     const isWeekend = localTime.getDay() === 0 || localTime.getDay() === 6; // Sunday = 0, Saturday = 6
     const isHolidayOrWeekend = isHoliday || isWeekend;
-    
+
     // Cek absensi hari ini
     const currentAttendance = await Attendance.findOne({
       where: {
@@ -160,7 +167,7 @@ export const getAttendanceStatus = async (req, res, next) => {
         }
       ]
     });
-    
+
     // Cek booking WFA hari ini
     const todayBooking = await Booking.findOne({
       where: {
@@ -185,12 +192,12 @@ export const getAttendanceStatus = async (req, res, next) => {
         }
       ]
     });
-    
+
     // Tentukan active_mode dan active_location
     let active_mode, active_location;
-    
+
     if (todayBooking) {
-      active_mode = "Work From Anywhere";
+      active_mode = 'Work From Anywhere';
       active_location = {
         location_id: todayBooking.location.location_id,
         latitude: parseFloat(todayBooking.location.latitude),
@@ -200,7 +207,7 @@ export const getAttendanceStatus = async (req, res, next) => {
         category: todayBooking.location.attendance_category.category_name
       };
     } else {
-      active_mode = "Work From Office";
+      active_mode = 'Work From Office';
       active_location = {
         location_id: null,
         latitude: WFO_LOCATION.latitude,
@@ -208,29 +215,30 @@ export const getAttendanceStatus = async (req, res, next) => {
         radius: WFO_LOCATION.radius,
         description: WFO_LOCATION.description,
         address: WFO_LOCATION.address,
-        category: "Work From Office"
+        category: 'Work From Office'
       };
     }
-    
+
     // Tentukan waktu check-in yang diizinkan (08:00 - 18:00)
     const currentHour = localTime.getHours();
     const currentMinute = localTime.getMinutes();
     const currentTimeMinutes = currentHour * 60 + currentMinute;
-    
-    const checkinStartMinutes = parseInt(checkinStartTime.split(':')[0]) * 60 + parseInt(checkinStartTime.split(':')[1]);
-    const checkoutAutoMinutes = parseInt(checkoutAutoTime.split(':')[0]) * 60 + parseInt(checkoutAutoTime.split(':')[1]);
-    
+
+    const checkinStartMinutes =
+      parseInt(checkinStartTime.split(':')[0]) * 60 + parseInt(checkinStartTime.split(':')[1]);
+    const checkoutAutoMinutes =
+      parseInt(checkoutAutoTime.split(':')[0]) * 60 + parseInt(checkoutAutoTime.split(':')[1]);
+
     // Tentukan can_check_in
-    const can_check_in = (
-      (!isHolidayOrWeekend || holidayCheckinEnabled) && 
-      !currentAttendance && 
-      currentTimeMinutes >= checkinStartMinutes && 
-      currentTimeMinutes <= checkoutAutoMinutes
-    );
-    
+    const can_check_in =
+      (!isHolidayOrWeekend || holidayCheckinEnabled) &&
+      !currentAttendance &&
+      currentTimeMinutes >= checkinStartMinutes &&
+      currentTimeMinutes <= checkoutAutoMinutes;
+
     // Tentukan can_check_out
     const can_check_out = currentAttendance && !currentAttendance.time_out;
-    
+
     // Bentuk respons
     const response = {
       success: true,
@@ -250,7 +258,7 @@ export const getAttendanceStatus = async (req, res, next) => {
         }
       }
     };
-    
+
     res.status(200).json(response);
   } catch (error) {
     next(error);
