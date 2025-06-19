@@ -324,3 +324,47 @@ export const validateCreateUser = [
 
   body('description').optional().isString().trim().withMessage('Deskripsi harus berupa teks')
 ];
+
+// Check-in validation rules
+export const checkInValidation = [
+  body('category_id')
+    .notEmpty()
+    .withMessage('Category ID wajib diisi')
+    .isInt({ min: 1, max: 3 })
+    .withMessage('Category ID harus 1 (WFO), 2 (WFH), atau 3 (WFA)'),
+
+  body('latitude')
+    .notEmpty()
+    .withMessage('Latitude wajib diisi')
+    .isFloat({ min: -90, max: 90 })
+    .withMessage('Latitude tidak valid')
+    .custom((value) => parseFloat(value) !== 0)
+    .withMessage('Latitude tidak boleh 0'),
+
+  body('longitude')
+    .notEmpty()
+    .withMessage('Longitude wajib diisi')
+    .isFloat({ min: -180, max: 180 })
+    .withMessage('Longitude tidak valid')
+    .custom((value) => parseFloat(value) !== 0)
+    .withMessage('Longitude tidak boleh 0'),
+
+  body('notes')
+    .optional()
+    .isString()
+    .trim()
+    .isLength({ max: 500 })
+    .withMessage('Catatan maksimal 500 karakter'),
+
+  body('booking_id')
+    .optional()
+    .isInt({ gt: 0 })
+    .withMessage('Booking ID harus berupa angka positif')
+    .custom((value, { req }) => {
+      // Jika category_id adalah 3 (WFA), booking_id wajib ada
+      if (req.body.category_id == 3 && !value) {
+        throw new Error('Booking ID wajib diisi untuk WFA');
+      }
+      return true;
+    })
+];
