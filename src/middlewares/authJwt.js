@@ -9,8 +9,8 @@ export const verifyToken = (req, res, next) => {
     if (!token) {
       return res.status(401).json({ message: 'No token provided' });
     }
-
     const decoded = jwt.verify(token, config.jwt.secret);
+
     req.user = decoded; // Sliding TTL - issue new token if less than 2 hours remaining
     const now = Math.floor(Date.now() / 1000);
     if (decoded.exp - now < 2 * 60 * 60) {

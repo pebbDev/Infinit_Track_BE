@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Jun 02, 2025 at 02:07 PM
+-- Generation Time: Jun 19, 2025 at 01:42 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.0.30
 
@@ -130,6 +130,18 @@ CREATE TABLE `divisions` (
   `division_name` varchar(100) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Dumping data for table `divisions`
+--
+
+INSERT INTO `divisions` (`id_divisions`, `division_name`) VALUES
+(1, 'Front-End Developer'),
+(2, 'Back-End Developer'),
+(3, 'DevOps Engineer'),
+(4, 'Data Scientist'),
+(5, 'UI/UX Designer'),
+(6, 'Quality Assurance (QA)');
+
 -- --------------------------------------------------------
 
 --
@@ -160,7 +172,16 @@ INSERT INTO `locations` (`location_id`, `latitude`, `longitude`, `radius`, `id_a
 (6, -6.208800, 106.845600, 100.00, 2, 'Rumah utama', 9, '2025-05-27 11:36:51'),
 (7, -6.208800, 106.845600, 100.00, 2, 'Rumah utama', 10, '2025-05-27 13:01:05'),
 (8, -6.208800, 106.845600, 112.00, 2, 'Rumah utama', 11, '2025-06-02 05:30:25'),
-(9, -6.208800, 106.845600, 112.00, 2, 'Rumah utama', 12, '2025-06-02 05:36:11');
+(9, -6.208800, 106.845600, 112.00, 2, 'Rumah utama', 12, '2025-06-02 05:36:11'),
+(10, -6.200000, 106.816666, 100.00, 2, 'Rumah John Doe', 13, '2025-06-03 00:29:09'),
+(11, 1.165630, 104.106725, 999.99, 2, 'Nongsa, Batam, Riau Islands, Sumatra, 29467, Indonesia', 14, '2025-06-03 08:47:18'),
+(12, 1.185866, 104.102235, 999.99, 2, 'Nongsa Digital Park, Batam, Riau Islands, Sumatra, 29467, Indonesia', 15, '2025-06-03 08:55:11'),
+(13, 1.181891, 104.102583, 999.99, 2, 'Jalan Hang Jebat, Nongsa, Batam, Riau Islands, Sumatra, 29467, Indonesia', 16, '2025-06-03 10:46:04'),
+(14, -0.747049, 117.047842, 100.00, 2, 'Kutai Kartanegara, East Kalimantan, Kalimantan, Indonesia', 17, '2025-06-18 07:49:58'),
+(15, -6.200000, 106.816666, 100.00, 2, 'Rumah John Doe', 18, '2025-06-19 09:55:33'),
+(16, -6.200000, 106.816666, 100.00, 2, 'Rumah John Doe', 19, '2025-06-19 10:54:12'),
+(17, -6.208800, 106.845600, 112.00, 2, 'Rumah utama', 20, '2025-06-19 11:10:41'),
+(18, -6.208800, 106.845600, 112.00, 2, 'Rumah utama', 21, '2025-06-19 11:23:26');
 
 -- --------------------------------------------------------
 
@@ -171,7 +192,8 @@ INSERT INTO `locations` (`location_id`, `latitude`, `longitude`, `radius`, `id_a
 CREATE TABLE `photos` (
   `id_photos` int(11) NOT NULL,
   `user_id` int(11) DEFAULT NULL,
-  `file_path` text NOT NULL,
+  `photo_url` text NOT NULL,
+  `public_id` text NOT NULL,
   `photo_updated_at` datetime NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
@@ -179,16 +201,25 @@ CREATE TABLE `photos` (
 -- Dumping data for table `photos`
 --
 
-INSERT INTO `photos` (`id_photos`, `user_id`, `file_path`, `photo_updated_at`) VALUES
-(5, 2, 'uploads\\face\\face-1748245969655-859492489.jpg', '2025-05-26 07:52:49'),
-(6, 3, 'uploads\\face\\face-1748246409017-181078066.jpg', '2025-05-26 08:00:09'),
-(7, 4, 'uploads\\face\\face-1748248237329-37107794.jpg', '2025-05-26 08:30:37'),
-(8, 7, 'uploads\\face\\face-1748333090217-344943194.jpg', '2025-05-27 08:04:50'),
-(9, 8, 'uploads\\face\\face-1748333551027-218673770.jpg', '2025-05-27 08:12:31'),
-(10, 9, 'uploads\\face\\face-1748345811412-863167318.jpg', '2025-05-27 11:36:51'),
-(11, 10, 'uploads\\face\\face-1748350865849-90443260.jpg', '2025-05-27 13:01:05'),
-(12, 11, 'uploads\\face\\face-1748842225018-402004703.jpg', '2025-06-02 05:30:25'),
-(13, 12, 'uploads\\face\\face-1748842571395-605448114.jpg', '2025-06-02 05:36:11');
+INSERT INTO `photos` (`id_photos`, `user_id`, `photo_url`, `public_id`, `photo_updated_at`) VALUES
+(5, 2, 'uploads\\face\\face-1748245969655-859492489.jpg', '', '2025-05-26 07:52:49'),
+(6, 3, 'uploads\\face\\face-1748246409017-181078066.jpg', '', '2025-05-26 08:00:09'),
+(7, 4, 'uploads\\face\\face-1748248237329-37107794.jpg', '', '2025-05-26 08:30:37'),
+(8, 7, 'uploads\\face\\face-1748333090217-344943194.jpg', '', '2025-05-27 08:04:50'),
+(9, 8, 'uploads\\face\\face-1748333551027-218673770.jpg', '', '2025-05-27 08:12:31'),
+(10, 9, 'uploads\\face\\face-1748345811412-863167318.jpg', '', '2025-05-27 11:36:51'),
+(11, 10, 'uploads\\face\\face-1748350865849-90443260.jpg', '', '2025-05-27 13:01:05'),
+(12, 11, 'uploads\\face\\face-1748842225018-402004703.jpg', '', '2025-06-02 05:30:25'),
+(13, 12, 'uploads/face/face-1748966442987-815286.jpg', '', '2025-06-03 16:00:43'),
+(14, 13, 'uploads\\face\\face-1748910549406-118214678.jpg', '', '2025-06-03 00:29:09'),
+(15, 14, 'uploads/face/face-1750247555463-829849.jpg', '', '2025-06-18 11:52:35'),
+(16, 15, 'uploads/face/face-1750327006873-84545.jpg', '', '2025-06-19 09:56:46'),
+(17, 16, 'uploads\\face\\face-1748947564368-192253868.jpg', '', '2025-06-03 10:46:04'),
+(18, 17, 'uploads/face/face-1750233067544-979561.jpg', '', '2025-06-18 07:51:07'),
+(19, 18, 'uploads\\face\\face-1750326933101-383173628.jpg', '', '2025-06-19 09:55:33'),
+(20, 19, 'https://res.cloudinary.com/dfbcj6o7j/image/upload/v1749121154/face_photos/wojf7orw0jzaznewxss7.jpg', 'face_photos/wojf7orw0jzaznewxss7', '2025-06-19 10:58:26'),
+(21, 20, 'https://res.cloudinary.com/dfbcj6o7j/image/upload/v1749121889/user_photos/rnqpzaqv2gf3mlfh0b9r.jpg', 'user_photos/rnqpzaqv2gf3mlfh0b9r', '2025-06-19 11:10:41'),
+(22, 21, 'https://res.cloudinary.com/dfbcj6o7j/image/upload/v1749122654/user_photos/mnpbrqm2ut1drkhc13ap.jpg', 'user_photos/mnpbrqm2ut1drkhc13ap', '2025-06-19 11:23:26');
 
 -- --------------------------------------------------------
 
@@ -269,6 +300,23 @@ INSERT INTO `roles` (`id_roles`, `role_name`) VALUES
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `sequelizemeta`
+--
+
+CREATE TABLE `sequelizemeta` (
+  `name` varchar(255) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+--
+-- Dumping data for table `sequelizemeta`
+--
+
+INSERT INTO `sequelizemeta` (`name`) VALUES
+('20240525120000-create-user.cjs');
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `users`
 --
 
@@ -300,11 +348,20 @@ INSERT INTO `users` (`id_users`, `full_name`, `email`, `password`, `phone`, `nip
 (3, 'februyadi', 'user12@email.com', '$2b$10$h7aC2UM8dS3ljZiFXeMSB.2k0/G0OBTsVzFzAJxjK8QgTVf8lKTei', '081234567895', '12345678FFg', 2, 2, 3, NULL, 6, '2025-05-26 08:00:09', '2025-05-26 08:00:09', NULL, NULL, NULL),
 (4, 'Febriyadi', 'febriyadi@email.com', '$2b$10$kfb803UzxNKn2QsZrrS0C.UZqmGr0Ltjvzxa9ETHn.y44yiF.ETTe', '08539507795', 'F55121082', 2, 2, 3, NULL, 7, '2025-05-26 08:30:37', '2025-05-26 08:30:37', NULL, NULL, NULL),
 (7, 'Febriyadi', 'febriyadi05@email.com', '$2b$10$z71ReWHCiBuN2am7vZfa6eb8qi.d1iOgxGLaJxz5.mSYfxmjGBr4G', '08539507795', 'F55121082c', 2, 2, 3, NULL, 8, '2025-05-27 08:04:50', '2025-05-27 08:04:50', NULL, NULL, NULL),
-(8, 'Febriyadi', 'febriyadi055@email.com', '$2b$10$8yfwNHQy5umCQwR/.JlQBeW6qA7ngd9jXIbnvcErbXnT0jg.M8pvm', '08539507795', 'F55121083', 2, 2, 3, NULL, 9, '2025-05-27 08:12:31', '2025-05-27 08:12:31', NULL, NULL, NULL),
+(8, 'Febriyadi', 'febriyadi055@email.com', '$2b$10$8yfwNHQy5umCQwR/.JlQBeW6qA7ngd9jXIbnvcErbXnT0jg.M8pvm', '08539507795', 'F55121083', 2, 2, 3, NULL, 9, '2025-05-27 08:12:31', '2025-06-02 16:14:50', '2025-06-02 16:14:50', NULL, NULL),
 (9, 'Febriyadi', 'febriyadi056@email.com', '$2b$10$8RKX6pMtuoYZNpK7iEJ51uvLulV9ea/ZojF264Iy2gyeStvxKxVGe', '08539507795', 'F55121082cd', 2, 2, 3, NULL, 10, '2025-05-27 11:36:51', '2025-05-27 11:36:51', NULL, NULL, NULL),
 (10, 'Febriyadi', 'febriyadi05d6@email.com', '$2b$10$/gtczjfTLkJ2FJw3CRNKeeEDvGhNn8udgi8exGvV9Y95q2J5urChK', '08539507795', 'F55121082cdgg', 2, 2, 3, NULL, 11, '2025-05-27 13:01:05', '2025-05-27 13:01:05', NULL, NULL, NULL),
 (11, 'Febriyadi', 'diana123@email.com', '$2b$10$xwIzrjmTz42ubfJHQztCx.oLiFVVGkWj/qmJbFn0WiGqdxvmE2cUW', '08539507795', 'F551210831', 1, 2, 3, NULL, 12, '2025-06-02 05:30:25', '2025-06-02 05:30:25', NULL, NULL, NULL),
-(12, 'Diana', '240@email.com', '$2b$10$quGEj6mvakhQnSt.Yl8Y8.t5CCIzoMRrqsJRwe6Ml6skOm2Q.SE7.', '08539507795', 'F551210832', 4, 2, 3, NULL, 13, '2025-06-02 05:36:11', '2025-06-02 05:36:11', NULL, NULL, NULL);
+(12, 'Diana', '240@email.com', '$2b$10$quGEj6mvakhQnSt.Yl8Y8.t5CCIzoMRrqsJRwe6Ml6skOm2Q.SE7.', '08539507795', 'F551210832', 4, 2, 3, NULL, 13, '2025-06-02 05:36:11', '2025-06-02 05:36:11', NULL, NULL, NULL),
+(13, 'John Doe', 'john.doe@example.com', '$2b$10$vfjHV4Wb.pb4keLMDpenxuJCoxFKp1mwn6dZhnMg3w0q5HAV33fC6', '08123456789', '240002', 4, 1, 1, 1, 14, '2025-06-03 00:29:09', '2025-06-03 00:29:09', NULL, 12, NULL),
+(14, 'John Doe', 'john.doe12@example.com', '$2b$10$KMeiGlgrafYsic12OI4y7uxPi5.pgVV66PDBaD8TLX4wK8OyNWajW', '08123456789', '240002ff', 1, 2, 5, 3, 15, '2025-06-03 08:47:18', '2025-06-18 11:52:35', NULL, 12, NULL),
+(15, 'Febriyadi', 'febriyadi11@gmail.com', '$2b$10$.mm603UNSHmzIz840eWLregVGgQsYYYw26/xdH9XpeII0HlSRbEZW', '085395077795', 'f55121092', 3, 1, 13, 3, 16, '2025-06-03 08:55:11', '2025-06-18 09:26:11', NULL, 12, NULL),
+(16, 'Shara bauuu', 'shara@gmail.com', '$2b$10$NKW9XxxxOLxAuGMGTaIq2eCItprNZc95wzFdqY044/CJH3aELiVH.', '05565656565', 'F555555555', 1, 3, 8, 3, 17, '2025-06-03 10:46:04', '2025-06-03 10:46:04', NULL, 12, NULL),
+(17, 'Febriyadi', 'shara123@gmail.com', '$2b$10$hTo4wsC2fObax5ywudaOj.TwG3aHNsC8ygiZOLLH0nSCnDObkRGky', '085395077795', 'F551210822222', 2, 2, 8, 3, 18, '2025-06-18 07:49:58', '2025-06-18 07:51:07', NULL, 12, NULL),
+(18, 'Diana', 'john.doe2@example.com', '$2b$10$fwanrb4gOxwZ4VRNQaJvQOSO3f8VHGPZYhSHag.hLneV3j6FVTNbO', '08123456789', '240002ff11', 4, 1, 1, 1, 19, '2025-06-19 09:55:33', '2025-06-19 09:55:33', NULL, 12, NULL),
+(19, 'Diana', 'john.doe21@example.com', '$2b$10$B5ZMqYueat96docGBpL9cemO5/ZWwbKlLauaYTz0PoCK1XfHJ52NC', '08123456789', '240002ff11111', 4, 1, 1, 1, 20, '2025-06-19 10:54:12', '2025-06-19 10:54:12', NULL, 12, NULL),
+(20, 'Diana', '12233@email.com', '$2b$10$jx349Bx8d4WL81rMtTnxDu5GRRTZI89VczZCvruAiYdajsUMmXYIy', '08539507795', 'F55121083212121', 4, 2, 3, NULL, 21, '2025-06-19 11:10:41', '2025-06-19 11:10:41', NULL, NULL, NULL),
+(21, 'Diana', 'febriyadi@gmail.com', '$2b$10$HFBq6o306rzjXFddU9GH..sApo412wT665nr5k9JALqTClDiMfRYG', '08539507795', 'F55121083211', 4, 2, 3, NULL, 22, '2025-06-19 11:23:26', '2025-06-19 11:23:26', NULL, NULL, NULL);
 
 --
 -- Indexes for dumped tables
@@ -388,6 +445,13 @@ ALTER TABLE `roles`
   ADD PRIMARY KEY (`id_roles`);
 
 --
+-- Indexes for table `sequelizemeta`
+--
+ALTER TABLE `sequelizemeta`
+  ADD PRIMARY KEY (`name`),
+  ADD UNIQUE KEY `name` (`name`);
+
+--
 -- Indexes for table `users`
 --
 ALTER TABLE `users`
@@ -433,19 +497,19 @@ ALTER TABLE `booking_status`
 -- AUTO_INCREMENT for table `divisions`
 --
 ALTER TABLE `divisions`
-  MODIFY `id_divisions` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id_divisions` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 
 --
 -- AUTO_INCREMENT for table `locations`
 --
 ALTER TABLE `locations`
-  MODIFY `location_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
+  MODIFY `location_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=19;
 
 --
 -- AUTO_INCREMENT for table `photos`
 --
 ALTER TABLE `photos`
-  MODIFY `id_photos` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=14;
+  MODIFY `id_photos` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=23;
 
 --
 -- AUTO_INCREMENT for table `positions`
@@ -469,7 +533,7 @@ ALTER TABLE `roles`
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `id_users` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
+  MODIFY `id_users` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=22;
 
 --
 -- Constraints for dumped tables

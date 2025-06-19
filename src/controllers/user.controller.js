@@ -1,7 +1,3 @@
-import fs from 'fs';
-import path from 'path';
-
-import sharp from 'sharp';
 import bcrypt from 'bcryptjs';
 import { Op } from 'sequelize';
 
@@ -17,6 +13,7 @@ import {
   sequelize
 } from '../models/index.js';
 import logger from '../utils/logger.js';
+import cloudinary from '../config/cloudinary.js';
 
 export const getProfile = async (req, res) => {
   try {
@@ -101,7 +98,7 @@ export const getAllUsers = async (req, res, next) => {
         {
           model: Photo,
           as: 'photo_file',
-          attributes: ['file_path', 'photo_updated_at'],
+          attributes: ['photo_url', 'photo_updated_at'],
           required: false
         },
         {
@@ -132,7 +129,7 @@ export const getAllUsers = async (req, res, next) => {
       division_name: user.division ? user.division.division_name : null,
       nip_nim: user.nip_nim,
       phone: user.phone,
-      photo: user.photo_file ? user.photo_file.file_path : null,
+      photo: user.photo_file ? user.photo_file.photo_url : null,
       photo_updated_at: user.photo_file ? user.photo_file.photo_updated_at : null,
       location: user.wfh_location
         ? {
@@ -184,38 +181,35 @@ export const uploadUserPhoto = async (req, res, next) => {
     }
 
     // Get old photo data for deletion
-    let oldPhotoFilePath = null;
+    let oldPublicId = null;
     let oldPhotoDeleted = false;
 
     if (user.id_photos) {
       const oldPhoto = await Photo.findByPk(user.id_photos);
-      if (oldPhoto && oldPhoto.file_path) {
-        oldPhotoFilePath = oldPhoto.file_path;
+      if (oldPhoto && oldPhoto.public_id) {
+        oldPublicId = oldPhoto.public_id;
       }
     }
 
-    // Create uploads/face directory if it doesn't exist
-    const uploadsDir = path.join(process.cwd(), 'uploads', 'face');
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir, { recursive: true });
-    } // Generate unique filename
-    const timestamp = Date.now();
-    const filename = `face-${timestamp}-${Math.floor(Math.random() * 1000000)}.jpg`;
-    const finalFilePath = path.join(uploadsDir, filename);
-    const relativePath = `uploads/face/${filename}`;
+    // Upload to Cloudinary
+    const uploadToCloudinary = (fileBuffer) => {
+      return new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+          {
+            resource_type: 'image',
+            folder: 'face_photos',
+            transformation: [{ width: 300, height: 300, crop: 'fill' }, { quality: 'auto' }]
+          },
+          (error, result) => {
+            if (error) return reject(error);
+            resolve(result);
+          }
+        );
+        uploadStream.end(fileBuffer);
+      });
+    };
 
-    // Process image with Sharp - read from temp file, write to final location
-    await sharp(req.file.path).resize(300, 300).jpeg({ quality: 80 }).toFile(finalFilePath);
-
-    // Clean up temporary file uploaded by Multer (after Sharp processing)
-    try {
-      if (fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
-        logger.info(`Temporary file cleaned up: ${req.file.path}`);
-      }
-    } catch (cleanupError) {
-      logger.warn(`Failed to cleanup temporary file ${req.file.path}: ${cleanupError.message}`);
-    }
+    const uploadResult = await uploadToCloudinary(req.file.buffer);
 
     // Create or update photo record
     let photo = await Photo.findOne({ where: { user_id: id } });
@@ -223,14 +217,16 @@ export const uploadUserPhoto = async (req, res, next) => {
     if (photo) {
       // Update existing photo
       await photo.update({
-        file_path: relativePath,
+        photo_url: uploadResult.secure_url,
+        public_id: uploadResult.public_id,
         photo_updated_at: new Date()
       });
     } else {
       // Create new photo record
       photo = await Photo.create({
         user_id: id,
-        file_path: relativePath,
+        photo_url: uploadResult.secure_url,
+        public_id: uploadResult.public_id,
         photo_updated_at: new Date()
       });
 
@@ -238,22 +234,23 @@ export const uploadUserPhoto = async (req, res, next) => {
       await user.update({
         id_photos: photo.id_photos
       });
-    } // Delete old photo file if exists
-    if (oldPhotoFilePath) {
+    }
+
+    // Delete old photo from Cloudinary if exists
+    if (oldPublicId) {
       try {
-        const fullOldPath = path.join(process.cwd(), oldPhotoFilePath);
-        if (fs.existsSync(fullOldPath)) {
-          fs.unlinkSync(fullOldPath);
-          oldPhotoDeleted = true;
-          logger.info(`Old photo deleted: ${oldPhotoFilePath}`);
-        }
+        await cloudinary.uploader.destroy(oldPublicId);
+        oldPhotoDeleted = true;
+        logger.info(`Old photo deleted from Cloudinary: ${oldPublicId}`);
       } catch (deleteError) {
-        logger.warn(`Failed to delete old photo ${oldPhotoFilePath}: ${deleteError.message}`);
+        logger.warn(
+          `Failed to delete old photo from Cloudinary ${oldPublicId}: ${deleteError.message}`
+        );
         oldPhotoDeleted = false;
       }
     }
 
-    logger.info(`Photo uploaded for user ${id}: ${relativePath}`);
+    logger.info(`Photo uploaded for user ${id}: ${uploadResult.secure_url}`);
 
     res.json({
       success: true,
@@ -261,7 +258,7 @@ export const uploadUserPhoto = async (req, res, next) => {
       data: {
         user_id: parseInt(id, 10),
         photo_id: photo.id_photos,
-        photo: relativePath,
+        photo: uploadResult.secure_url,
         photo_updated_at: photo.photo_updated_at,
         old_photo_deleted: oldPhotoDeleted
       }
@@ -395,7 +392,7 @@ export const updateUser = async (req, res, next) => {
         {
           model: Photo,
           as: 'photo_file',
-          attributes: ['file_path', 'photo_updated_at'],
+          attributes: ['photo_url', 'photo_updated_at'],
           required: false
         },
         {
@@ -425,7 +422,7 @@ export const updateUser = async (req, res, next) => {
       division_name: updatedUser.division ? updatedUser.division.division_name : null,
       nip_nim: updatedUser.nip_nim,
       phone: updatedUser.phone,
-      photo: updatedUser.photo_file ? updatedUser.photo_file.file_path : null,
+      photo: updatedUser.photo_file ? updatedUser.photo_file.photo_url : null,
       photo_updated_at: updatedUser.photo_file ? updatedUser.photo_file.photo_updated_at : null,
       location: updatedUser.wfh_location
         ? {
@@ -511,7 +508,7 @@ export const createUser = async (req, res, next) => {
       radius,
       description
     } = req.body; // Check if file uploaded
-    if (!req.file || !req.file.path) {
+    if (!req.file || !req.file.buffer) {
       await transaction.rollback();
       return res.status(400).json({
         success: false,
@@ -550,15 +547,34 @@ export const createUser = async (req, res, next) => {
     }
 
     // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Temporarily disable foreign key checks to handle circular dependency
+    const hashedPassword = await bcrypt.hash(password, 10); // Temporarily disable foreign key checks to handle circular dependency
     await sequelize.query('SET FOREIGN_KEY_CHECKS = 0', { transaction });
+
+    // Upload to Cloudinary first
+    const uploadToCloudinary = (fileBuffer) => {
+      return new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+          {
+            resource_type: 'image',
+            folder: 'face_photos',
+            transformation: [{ width: 300, height: 300, crop: 'fill' }, { quality: 'auto' }]
+          },
+          (error, result) => {
+            if (error) return reject(error);
+            resolve(result);
+          }
+        );
+        uploadStream.end(fileBuffer);
+      });
+    };
+
+    const uploadResult = await uploadToCloudinary(req.file.buffer);
 
     // Create photo record first with temporary user_id
     const photo = await Photo.create(
       {
-        file_path: req.file.path,
+        photo_url: uploadResult.secure_url,
+        public_id: uploadResult.public_id,
         user_id: 1, // Temporary value, will be updated after user creation
         photo_updated_at: new Date()
       },
@@ -639,7 +655,7 @@ export const createUser = async (req, res, next) => {
         {
           model: Photo,
           as: 'photo_file',
-          attributes: ['file_path', 'photo_updated_at'],
+          attributes: ['photo_url', 'photo_updated_at'],
           required: false
         },
         {
@@ -669,7 +685,7 @@ export const createUser = async (req, res, next) => {
       division_name: createdUser.division ? createdUser.division.division_name : null,
       nip_nim: createdUser.nip_nim,
       phone: createdUser.phone,
-      photo: createdUser.photo_file ? createdUser.photo_file.file_path : null,
+      photo: createdUser.photo_file ? createdUser.photo_file.photo_url : null,
       photo_updated_at: createdUser.photo_file ? createdUser.photo_file.photo_updated_at : null,
       location: createdUser.wfh_location
         ? {
@@ -735,7 +751,7 @@ export const getUserById = async (req, res, next) => {
         {
           model: Photo,
           as: 'photo_file',
-          attributes: ['file_path', 'photo_updated_at'],
+          attributes: ['photo_url', 'photo_updated_at'],
           required: false
         },
         {
@@ -774,7 +790,7 @@ export const getUserById = async (req, res, next) => {
       division_name: user.division ? user.division.division_name : null,
       nip_nim: user.nip_nim,
       phone: user.phone,
-      photo: user.photo_file ? user.photo_file.file_path : null,
+      photo: user.photo_file ? user.photo_file.photo_url : null,
       photo_updated_at: user.photo_file ? user.photo_file.photo_updated_at : null,
       location: user.wfh_location
         ? {

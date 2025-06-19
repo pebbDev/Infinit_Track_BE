@@ -1,10 +1,9 @@
-import fs from 'fs';
-
 import { validationResult } from 'express-validator';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 
 import config from '../config/index.js';
+import cloudinary from '../config/cloudinary.js';
 import {
   User,
   Photo,
@@ -53,15 +52,11 @@ export const login = async (req, res) => {
           as: 'position',
           attributes: ['position_name']
         },
-        {
-          model: Division,
-          as: 'division',
-          attributes: ['division_name']
-        },
+        { model: Division, as: 'division', attributes: ['division_name'] },
         {
           model: Photo,
           as: 'photo_file',
-          attributes: ['file_path', 'photo_updated_at']
+          attributes: ['photo_url', 'photo_updated_at']
         }
       ]
     });
@@ -136,7 +131,7 @@ export const login = async (req, res) => {
       division_name: user.division ? user.division.division_name : null,
       nip_nim: user.nip_nim,
       phone: user.phone,
-      photo: user.photo_file ? user.photo_file.file_path : null,
+      photo: user.photo_file ? user.photo_file.photo_url : null,
       photo_updated_at: user.photo_file ? user.photo_file.photo_updated_at : null,
       location: wfhLocation
         ? {
@@ -154,7 +149,7 @@ export const login = async (req, res) => {
         email: user.email,
         full_name: user.full_name,
         role_name: user.role?.role_name || null,
-        photo: user.photo_file ? user.photo_file.file_path : null
+        photo: user.photo_file ? user.photo_file.photo_url : null
       };
 
       token = jwt.sign(payload, config.jwt.secret, {
@@ -171,12 +166,9 @@ export const login = async (req, res) => {
       }
 
       logger.info(`Login successful for user: ${email}`);
-    }
+    } // Always add token to response (for both mobile and web clients)
+    responseData.token = token;
 
-    // Add token to response for mobile clients
-    if (isMobile) {
-      responseData.token = token;
-    }
     res.json({
       success: true,
       data: responseData,
@@ -261,10 +253,8 @@ export const register = async (req, res) => {
       return res
         .status(400)
         .json({ success: false, code: 'E_VALIDATION', message: 'NIP/NIM sudah ada' });
-    }
-
-    // Cek file upload
-    if (!req.file || !req.file.path) {
+    } // Cek file upload
+    if (!req.file || !req.file.buffer) {
       await transaction.rollback();
       return res.status(400).json({
         success: false,
@@ -275,13 +265,44 @@ export const register = async (req, res) => {
     } // Hash password
     const password_hash = await bcrypt.hash(password, 10);
 
+    // Upload photo to Cloudinary
+    let cloudinaryResult;
+    try {
+      cloudinaryResult = await new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          {
+            folder: 'user_photos',
+            transformation: [
+              { width: 500, height: 500, crop: 'fill', gravity: 'face' },
+              { quality: 'auto' }
+            ],
+            resource_type: 'image'
+          },
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+          }
+        );
+        stream.end(req.file.buffer);
+      });
+    } catch (uploadError) {
+      await transaction.rollback();
+      logger.error(`Cloudinary upload error: ${uploadError.message}`);
+      return res.status(500).json({
+        success: false,
+        code: 'E_UPLOAD',
+        message: 'Gagal mengupload foto ke cloud storage'
+      });
+    }
+
     // Temporarily disable foreign key checks to handle circular dependency
     await sequelize.query('SET FOREIGN_KEY_CHECKS = 0', { transaction });
 
     // Create photo first
     const photo = await Photo.create(
       {
-        file_path: req.file.path,
+        photo_url: cloudinaryResult.secure_url,
+        public_id: cloudinaryResult.public_id,
         user_id: 1, // Temporary value, will be updated after user creation
         photo_updated_at: new Date()
       },
@@ -347,11 +368,8 @@ export const register = async (req, res) => {
       id: user.id_users,
       email: user.email,
       full_name: user.full_name,
-      role: {
-        id: userWithRole.role?.id_roles || null,
-        name: userWithRole.role?.role_name || null
-      },
-      photo: req.file.path
+      role_name: userWithRole.role?.role_name || null,
+      photo: cloudinaryResult.secure_url
     };
 
     const token = jwt.sign(payload, config.jwt.secret, {
@@ -366,10 +384,8 @@ export const register = async (req, res) => {
         user: {
           id: userWithRole.id_users,
           full_name: userWithRole.full_name,
-          role: {
-            id: userWithRole.role?.id_roles || null,
-            name: userWithRole.role?.role_name || null
-          },
+          email: userWithRole.email,
+          role_name: userWithRole.role?.role_name || null,
           token: token
         },
         location: {
@@ -385,18 +401,6 @@ export const register = async (req, res) => {
   } catch (err) {
     // Rollback transaksi jika ada error
     await transaction.rollback();
-
-    // Clean up uploaded file if exists
-    if (req.file && req.file.path) {
-      try {
-        if (fs.existsSync(req.file.path)) {
-          fs.unlinkSync(req.file.path);
-          logger.info(`Cleaned up uploaded file: ${req.file.path}`);
-        }
-      } catch (cleanupError) {
-        logger.error(`Failed to cleanup file: ${cleanupError.message}`);
-      }
-    }
 
     // Handle multer errors specifically
     if (err.code === 'UNEXPECTED_FIELD' || err.name === 'MulterError') {
@@ -445,7 +449,7 @@ export const getCurrentUser = async (req, res, next) => {
         {
           model: Photo,
           as: 'photo_file',
-          attributes: ['file_path', 'photo_updated_at']
+          attributes: ['photo_url', 'photo_updated_at']
         }
       ]
     });
@@ -492,7 +496,7 @@ export const getCurrentUser = async (req, res, next) => {
       division_name: user.division ? user.division.division_name : null,
       nip_nim: user.nip_nim,
       phone: user.phone,
-      photo: user.photo_file ? user.photo_file.file_path : null,
+      photo: user.photo_file ? user.photo_file.photo_url : null,
       photo_updated_at: user.photo_file ? user.photo_file.photo_updated_at : null,
       location: wfhLocation
         ? {

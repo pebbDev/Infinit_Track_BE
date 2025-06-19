@@ -1,25 +1,16 @@
-import path from 'path';
-import fs from 'fs';
-
 import { body, validationResult } from 'express-validator';
 import multer from 'multer';
 
 import User from '../models/user.model.js';
 
-const uploadsDir = 'uploads/face/';
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
+// Remove the file system setup as we're switching to Cloudinary
+// const uploadsDir = 'uploads/face/';
+// if (!fs.existsSync(uploadsDir)) {
+//   fs.mkdirSync(uploadsDir, { recursive: true });
+// }
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, 'face-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
+// Use memory storage instead of disk storage for Cloudinary
+const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, cb) => {
   const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
@@ -33,7 +24,7 @@ const fileFilter = (req, file, cb) => {
 export const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 100024 * 100024
+    fileSize: 20 * 1024 * 1024 // 20MB
   },
   fileFilter: fileFilter
 });

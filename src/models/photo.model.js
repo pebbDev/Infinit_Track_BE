@@ -18,9 +18,13 @@ const Photo = sequelize.define(
         key: 'id_users'
       }
     },
-    file_path: {
+    photo_url: {
       type: DataTypes.TEXT,
       allowNull: false
+    },
+    public_id: {
+      type: DataTypes.STRING(255),
+      allowNull: true
     },
     photo_updated_at: {
       type: DataTypes.DATE,

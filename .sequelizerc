@@ -1,6 +1,7 @@
-import { resolve } from 'path';
-export default {
-  'config': resolve('src', 'config', 'database.js'),
+const { resolve } = require('path');
+
+module.exports = {
+  config: resolve('src', 'config', 'database-cli.cjs'),
   'migrations-path': resolve('src', 'models', 'migrations'),
   'seeders-path': resolve('src', 'models', 'seeders'),
   'models-path': resolve('src', 'models')
