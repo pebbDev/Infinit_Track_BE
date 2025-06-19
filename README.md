@@ -58,6 +58,23 @@ npm run seed         # Seed initial data
 
 Visit `/docs` endpoint when server is running to view Swagger documentation.
 
+### Key Endpoints
+
+#### Attendance
+- `GET /api/attendance/status-today` - Get today's attendance status (source of truth for mobile UI)
+- `POST /api/attendance/clock-in` - Clock in
+- `POST /api/attendance/clock-out` - Clock out  
+- `GET /api/attendance/history` - Get attendance history
+
+#### Authentication
+- `POST /api/auth/login` - User login
+- `POST /api/auth/refresh` - Refresh token
+
+### Mobile Integration
+For Android integration, see:
+- `API_DOCUMENTATION_ATTENDANCE_STATUS.md` - Complete API documentation
+- `ANDROID_INTEGRATION_GUIDE.md` - Quick integration guide for Android developers
+
 ## 🛠️ Development
 
 The project uses:

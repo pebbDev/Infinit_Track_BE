@@ -11,6 +11,9 @@ import Division from './division.model.js';
 import Photo from './photo.model.js';
 import AttendanceCategory from './attendanceCategory.model.js';
 import Location from './location.js';
+import Settings from './settings.model.js';
+import Booking from './booking.model.js';
+import BookingStatus from './bookingStatus.model.js';
 
 // Jalankan relasi SETELAH define semua model
 User.belongsTo(Role, { foreignKey: 'id_roles', as: 'role' });
@@ -36,6 +39,21 @@ Division.hasMany(User, { foreignKey: 'id_divisions', as: 'users' });
 // Photo relations
 Photo.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 
+// Attendance relations
+Attendance.belongsTo(User, {
+  foreignKey: 'user_id',
+  targetKey: 'id_users',
+  as: 'user'
+});
+Attendance.belongsTo(Location, {
+  foreignKey: 'location_id',
+  as: 'location'
+});
+Attendance.belongsTo(Booking, {
+  foreignKey: 'booking_id',
+  as: 'booking'
+});
+
 // Location relations with User and AttendanceCategory
 User.hasOne(Location, {
   foreignKey: 'user_id',
@@ -52,6 +70,27 @@ Location.belongsTo(AttendanceCategory, {
   as: 'attendance_category'
 });
 
+// Booking relations
+Booking.belongsTo(User, {
+  foreignKey: 'user_id',
+  targetKey: 'id_users',
+  as: 'user'
+});
+Booking.belongsTo(Location, {
+  foreignKey: 'location_id',
+  as: 'location'
+});
+Booking.belongsTo(BookingStatus, {
+  foreignKey: 'status',
+  as: 'booking_status'
+});
+
+// BookingStatus relations
+BookingStatus.hasMany(Booking, {
+  foreignKey: 'status',
+  as: 'bookings'
+});
+
 export {
   sequelize,
   User,
@@ -63,5 +102,8 @@ export {
   Division,
   Photo,
   AttendanceCategory,
-  Location
+  Location,
+  Settings,
+  Booking,
+  BookingStatus
 };

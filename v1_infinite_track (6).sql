@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Jun 19, 2025 at 01:42 PM
+-- Generation Time: Jun 19, 2025 at 06:17 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.0.30
 
@@ -35,7 +35,7 @@ CREATE TABLE `attendance` (
   `location_id` int(11) DEFAULT NULL,
   `booking_id` int(11) DEFAULT NULL,
   `time_in` datetime NOT NULL,
-  `time_out` datetime NOT NULL,
+  `time_out` datetime DEFAULT NULL,
   `work_hour` float(5,2) NOT NULL,
   `attendance_date` date NOT NULL,
   `notes` text NOT NULL,
@@ -96,7 +96,10 @@ CREATE TABLE `bookings` (
   `location_id` int(11) NOT NULL,
   `status` int(11) NOT NULL,
   `notes` text NOT NULL,
-  `created_at` datetime NOT NULL
+  `created_at` datetime NOT NULL,
+  `approved_by` int(11) DEFAULT NULL,
+  `processed_at` datetime DEFAULT NULL,
+  `rejection_reason` int(11) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -178,10 +181,12 @@ INSERT INTO `locations` (`location_id`, `latitude`, `longitude`, `radius`, `id_a
 (12, 1.185866, 104.102235, 999.99, 2, 'Nongsa Digital Park, Batam, Riau Islands, Sumatra, 29467, Indonesia', 15, '2025-06-03 08:55:11'),
 (13, 1.181891, 104.102583, 999.99, 2, 'Jalan Hang Jebat, Nongsa, Batam, Riau Islands, Sumatra, 29467, Indonesia', 16, '2025-06-03 10:46:04'),
 (14, -0.747049, 117.047842, 100.00, 2, 'Kutai Kartanegara, East Kalimantan, Kalimantan, Indonesia', 17, '2025-06-18 07:49:58'),
-(15, -6.200000, 106.816666, 100.00, 2, 'Rumah John Doe', 18, '2025-06-19 09:55:33'),
-(16, -6.200000, 106.816666, 100.00, 2, 'Rumah John Doe', 19, '2025-06-19 10:54:12'),
+(15, -0.836243, 119.894654, 100.00, 2, 'Universitas Tadulako, Jalan Masjid Darul Hikmah, Boyangapa, Kecamatan Mantikulore, Palu, Central Sulawesi, Sulawesi, 94119, Indonesia', 18, '2025-06-19 09:55:33'),
+(16, -6.200000, 106.816666, 100.00, 2, '', 19, '2025-06-19 10:54:12'),
 (17, -6.208800, 106.845600, 112.00, 2, 'Rumah utama', 20, '2025-06-19 11:10:41'),
-(18, -6.208800, 106.845600, 112.00, 2, 'Rumah utama', 21, '2025-06-19 11:23:26');
+(18, -0.895779, 119.867997, 112.00, 2, 'Palu, Kecamatan Palu Timur, Palu, Central Sulawesi, Sulawesi, 94112, Indonesia', 21, '2025-06-19 11:23:26'),
+(19, -6.200000, 106.816666, 100.00, 2, 'Rumah John Doe', 22, '2025-06-19 11:51:15'),
+(20, 1.123068, 104.102734, 100.00, 2, 'Jalan Hang Tuah, Belian, Batam, Riau Islands, Sumatra, 29464, Indonesia', 23, '2025-06-19 12:34:51');
 
 -- --------------------------------------------------------
 
@@ -216,10 +221,12 @@ INSERT INTO `photos` (`id_photos`, `user_id`, `photo_url`, `public_id`, `photo_u
 (16, 15, 'uploads/face/face-1750327006873-84545.jpg', '', '2025-06-19 09:56:46'),
 (17, 16, 'uploads\\face\\face-1748947564368-192253868.jpg', '', '2025-06-03 10:46:04'),
 (18, 17, 'uploads/face/face-1750233067544-979561.jpg', '', '2025-06-18 07:51:07'),
-(19, 18, 'uploads\\face\\face-1750326933101-383173628.jpg', '', '2025-06-19 09:55:33'),
-(20, 19, 'https://res.cloudinary.com/dfbcj6o7j/image/upload/v1749121154/face_photos/wojf7orw0jzaznewxss7.jpg', 'face_photos/wojf7orw0jzaznewxss7', '2025-06-19 10:58:26'),
+(19, 18, 'https://res.cloudinary.com/dfbcj6o7j/image/upload/v1749129796/face_photos/wyb7z3huq6dqmlsiswtd.png', 'face_photos/wyb7z3huq6dqmlsiswtd', '2025-06-19 13:22:28'),
+(20, 19, 'https://res.cloudinary.com/dfbcj6o7j/image/upload/v1749127162/face_photos/abps8etahwbrybka8rl5.jpg', 'face_photos/abps8etahwbrybka8rl5', '2025-06-19 12:38:34'),
 (21, 20, 'https://res.cloudinary.com/dfbcj6o7j/image/upload/v1749121889/user_photos/rnqpzaqv2gf3mlfh0b9r.jpg', 'user_photos/rnqpzaqv2gf3mlfh0b9r', '2025-06-19 11:10:41'),
-(22, 21, 'https://res.cloudinary.com/dfbcj6o7j/image/upload/v1749122654/user_photos/mnpbrqm2ut1drkhc13ap.jpg', 'user_photos/mnpbrqm2ut1drkhc13ap', '2025-06-19 11:23:26');
+(22, 21, 'https://res.cloudinary.com/dfbcj6o7j/image/upload/v1749126784/face_photos/jxzctvgi1agz5zwoallv.jpg', 'face_photos/jxzctvgi1agz5zwoallv', '2025-06-19 12:32:17'),
+(23, 22, 'https://res.cloudinary.com/dfbcj6o7j/image/upload/v1749124323/face_photos/xrj5boa7bjqzk3yzgpsl.jpg', 'face_photos/xrj5boa7bjqzk3yzgpsl', '2025-06-19 11:51:15'),
+(24, 23, 'https://res.cloudinary.com/dfbcj6o7j/image/upload/v1749126939/face_photos/imad21vtwvjwp0jfx9p2.jpg', 'face_photos/imad21vtwvjwp0jfx9p2', '2025-06-19 12:34:51');
 
 -- --------------------------------------------------------
 
@@ -317,6 +324,29 @@ INSERT INTO `sequelizemeta` (`name`) VALUES
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `settings`
+--
+
+CREATE TABLE `settings` (
+  `setting_key` varchar(100) NOT NULL,
+  `setting_value` text NOT NULL,
+  `description` text DEFAULT NULL,
+  `updated_at` date NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `settings`
+--
+
+INSERT INTO `settings` (`setting_key`, `setting_value`, `description`, `updated_at`) VALUES
+('checkin.start_time', '08:00:00', 'ontime', '0000-00-00'),
+('checkin.late_time', '10:00:00', 'Late', '0000-00-00'),
+('checkout.auto_time', '17:00:00', 'Cek out', '0000-00-00'),
+('checkout.flexible', 'true', 'check-out valid', '0000-00-00');
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `users`
 --
 
@@ -358,10 +388,12 @@ INSERT INTO `users` (`id_users`, `full_name`, `email`, `password`, `phone`, `nip
 (15, 'Febriyadi', 'febriyadi11@gmail.com', '$2b$10$.mm603UNSHmzIz840eWLregVGgQsYYYw26/xdH9XpeII0HlSRbEZW', '085395077795', 'f55121092', 3, 1, 13, 3, 16, '2025-06-03 08:55:11', '2025-06-18 09:26:11', NULL, 12, NULL),
 (16, 'Shara bauuu', 'shara@gmail.com', '$2b$10$NKW9XxxxOLxAuGMGTaIq2eCItprNZc95wzFdqY044/CJH3aELiVH.', '05565656565', 'F555555555', 1, 3, 8, 3, 17, '2025-06-03 10:46:04', '2025-06-03 10:46:04', NULL, 12, NULL),
 (17, 'Febriyadi', 'shara123@gmail.com', '$2b$10$hTo4wsC2fObax5ywudaOj.TwG3aHNsC8ygiZOLLH0nSCnDObkRGky', '085395077795', 'F551210822222', 2, 2, 8, 3, 18, '2025-06-18 07:49:58', '2025-06-18 07:51:07', NULL, 12, NULL),
-(18, 'Diana', 'john.doe2@example.com', '$2b$10$fwanrb4gOxwZ4VRNQaJvQOSO3f8VHGPZYhSHag.hLneV3j6FVTNbO', '08123456789', '240002ff11', 4, 1, 1, 1, 19, '2025-06-19 09:55:33', '2025-06-19 09:55:33', NULL, 12, NULL),
-(19, 'Diana', 'john.doe21@example.com', '$2b$10$B5ZMqYueat96docGBpL9cemO5/ZWwbKlLauaYTz0PoCK1XfHJ52NC', '08123456789', '240002ff11111', 4, 1, 1, 1, 20, '2025-06-19 10:54:12', '2025-06-19 10:54:12', NULL, 12, NULL),
+(18, 'Diana', 'john.doe2@example.com', '$2b$10$fwanrb4gOxwZ4VRNQaJvQOSO3f8VHGPZYhSHag.hLneV3j6FVTNbO', '08123456789', '240002ff11', 3, 3, 16, 4, 19, '2025-06-19 09:55:33', '2025-06-19 13:22:07', NULL, 12, NULL),
+(19, 'Diana', 'john.doe21@example.com', '$2b$10$B5ZMqYueat96docGBpL9cemO5/ZWwbKlLauaYTz0PoCK1XfHJ52NC', '08123456789', '240002ff11111', 3, 1, 2, 4, 20, '2025-06-19 10:54:12', '2025-06-19 13:20:53', NULL, 12, NULL),
 (20, 'Diana', '12233@email.com', '$2b$10$jx349Bx8d4WL81rMtTnxDu5GRRTZI89VczZCvruAiYdajsUMmXYIy', '08539507795', 'F55121083212121', 4, 2, 3, NULL, 21, '2025-06-19 11:10:41', '2025-06-19 11:10:41', NULL, NULL, NULL),
-(21, 'Diana', 'febriyadi@gmail.com', '$2b$10$HFBq6o306rzjXFddU9GH..sApo412wT665nr5k9JALqTClDiMfRYG', '08539507795', 'F55121083211', 4, 2, 3, NULL, 22, '2025-06-19 11:23:26', '2025-06-19 11:23:26', NULL, NULL, NULL);
+(21, 'Diana', 'febriyadi@gmail.com', '$2b$10$HFBq6o306rzjXFddU9GH..sApo412wT665nr5k9JALqTClDiMfRYG', '08539507795', 'F55121083211', 4, 3, 14, 2, 22, '2025-06-19 11:23:26', '2025-06-19 12:31:19', NULL, NULL, NULL),
+(22, 'Diana', 'john.doe2122@example.com', '$2b$10$X5afT6.9.X.biSZFWUk1nOD5Xlkl3sAqNhGaOnsLDxAPCpzBbPVUG', '08123456789', '240002ff1111111', 4, 1, 1, 1, 23, '2025-06-19 11:51:15', '2025-06-19 11:51:15', NULL, 21, NULL),
+(23, 'Timothy Ronald', 'timothyronald@gmail.com', '$2b$10$gijbalbmUEK/z.vYfWXMKOClEizxzeqjmVzc0dqWOLxwAjHXMICW6', '085395077795', 'F5512062', 1, 3, 12, 4, 24, '2025-06-19 12:34:51', '2025-06-19 12:34:51', NULL, 12, NULL);
 
 --
 -- Indexes for dumped tables
@@ -503,13 +535,13 @@ ALTER TABLE `divisions`
 -- AUTO_INCREMENT for table `locations`
 --
 ALTER TABLE `locations`
-  MODIFY `location_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=19;
+  MODIFY `location_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=21;
 
 --
 -- AUTO_INCREMENT for table `photos`
 --
 ALTER TABLE `photos`
-  MODIFY `id_photos` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=23;
+  MODIFY `id_photos` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=25;
 
 --
 -- AUTO_INCREMENT for table `positions`
@@ -533,7 +565,7 @@ ALTER TABLE `roles`
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `id_users` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=22;
+  MODIFY `id_users` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=24;
 
 --
 -- Constraints for dumped tables
