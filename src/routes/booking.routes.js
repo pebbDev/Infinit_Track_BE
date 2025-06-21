@@ -1,0 +1,40 @@
+import express from 'express';
+
+import {
+  createBooking,
+  updateBookingStatus,
+  getAllBookings,
+  getMyBookings
+} from '../controllers/booking.controller.js';
+import { verifyToken } from '../middlewares/authJwt.js';
+import roleGuard from '../middlewares/roleGuard.js';
+import {
+  createBookingValidation,
+  updateStatusValidation,
+  validate
+} from '../middlewares/validator.js';
+
+const router = express.Router();
+
+// Semua routes booking memerlukan autentikasi
+router.use(verifyToken);
+
+// POST /api/bookings - Membuat booking WFA (untuk semua user yang sudah login)
+router.post('/', createBookingValidation, validate, createBooking);
+
+// PATCH /api/bookings/:id - Update status booking (hanya admin dan management)
+router.patch(
+  '/:id',
+  roleGuard(['Admin', 'Management']),
+  updateStatusValidation,
+  validate,
+  updateBookingStatus
+);
+
+// GET /api/bookings - Mendapatkan semua booking (hanya admin dan management)
+router.get('/', roleGuard(['Admin', 'Management']), getAllBookings);
+
+// GET /api/bookings/my - Mendapatkan booking user sendiri
+router.get('/my', getMyBookings);
+
+export default router;

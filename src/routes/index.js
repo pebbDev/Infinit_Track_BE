@@ -4,6 +4,7 @@ import authRoutes from './auth.routes.js';
 import attendanceRoutes from './attendance.routes.js';
 import usersRoutes from './users.routes.js';
 import referenceDataRoutes from './referenceData.routes.js';
+import bookingRoutes from './booking.routes.js';
 
 const router = express.Router();
 
@@ -12,6 +13,7 @@ router.use('/api/auth', authRoutes);
 router.use('/api/attendance', attendanceRoutes);
 router.use('/api/users', usersRoutes);
 router.use('/api', referenceDataRoutes);
+router.use('/api/bookings', bookingRoutes);
 
 // Health check
 router.get('/health', (req, res) => {

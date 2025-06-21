@@ -5,7 +5,8 @@ import {
   clockOut,
   getAttendanceHistory,
   getAttendanceStatus,
-  checkIn
+  checkIn,
+  debugCheckInTime
 } from '../controllers/attendance.controller.js';
 import { verifyToken } from '../middlewares/authJwt.js';
 import { checkInValidation, validate } from '../middlewares/validator.js';
@@ -20,5 +21,6 @@ router.post('/clock-out', clockOut);
 router.post('/check-in', checkInValidation, validate, checkIn);
 router.get('/history', getAttendanceHistory);
 router.get('/status-today', getAttendanceStatus);
+router.get('/debug-checkin-time', debugCheckInTime); // Debug endpoint
 
 export default router;

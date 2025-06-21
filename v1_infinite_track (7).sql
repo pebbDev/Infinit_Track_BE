@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Jun 19, 2025 at 06:17 PM
+-- Generation Time: Jun 17, 2025 at 08:30 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.0.30
 
@@ -42,6 +42,17 @@ CREATE TABLE `attendance` (
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `attendance`
+--
+
+INSERT INTO `attendance` (`id_attendance`, `user_id`, `category_id`, `status_id`, `location_id`, `booking_id`, `time_in`, `time_out`, `work_hour`, `attendance_date`, `notes`, `created_at`, `updated_at`) VALUES
+(1, 21, 1, 1, NULL, NULL, '2025-06-20 00:07:06', NULL, 0.00, '2025-06-20', 'Check-in from office', '2025-06-20 00:07:06', '2025-06-20 00:07:06'),
+(2, 21, 1, 2, NULL, NULL, '2025-06-17 09:32:58', NULL, 0.00, '2025-06-17', 'Check-in from office', '2025-06-17 09:32:58', '2025-06-17 09:32:58'),
+(3, 11, 1, 2, NULL, NULL, '2025-06-17 11:57:17', NULL, 0.00, '2025-06-17', 'Check-in from office', '2025-06-17 11:57:17', '2025-06-17 11:57:17'),
+(4, 23, 1, 2, NULL, NULL, '2025-06-17 12:04:50', NULL, 0.00, '2025-06-17', 'Check-in from office', '2025-06-17 12:04:50', '2025-06-17 12:04:50'),
+(5, 22, 1, 2, NULL, NULL, '2025-06-17 12:06:41', NULL, 0.00, '2025-06-17', 'Check-in from office', '2025-06-17 12:06:41', '2025-06-17 12:06:41');
 
 -- --------------------------------------------------------
 
@@ -101,6 +112,14 @@ CREATE TABLE `bookings` (
   `processed_at` datetime DEFAULT NULL,
   `rejection_reason` int(11) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `bookings`
+--
+
+INSERT INTO `bookings` (`booking_id`, `user_id`, `schedule_date`, `location_id`, `status`, `notes`, `created_at`, `approved_by`, `processed_at`, `rejection_reason`) VALUES
+(1, 21, '2025-06-20', 21, 2, 'Perlu fokus untuk menyelesaikan project deadline', '2025-06-19 18:45:02', 21, '2025-06-06 01:07:56', NULL),
+(2, 21, '2025-06-20', 22, 2, 'Saya ingin bersantai-santai dong', '2025-06-06 01:07:11', 21, '2025-06-06 02:22:42', NULL);
 
 -- --------------------------------------------------------
 
@@ -167,7 +186,7 @@ CREATE TABLE `locations` (
 --
 
 INSERT INTO `locations` (`location_id`, `latitude`, `longitude`, `radius`, `id_attendance_categories`, `description`, `user_id`, `created_at`) VALUES
-(1, -6.208800, 106.845600, 150.00, 2, 'Rumah utama', 2, '2025-05-26 07:52:49'),
+(1, -6.175400, 106.827200, 100.00, 1, 'Kantor Pusat Infinite Learning', NULL, '2025-06-17 13:35:22'),
 (2, -6.208800, 106.845600, 150.00, 2, 'Rumah utama', 3, '2025-05-26 08:00:09'),
 (3, -6.208800, 106.845600, 100.00, 2, 'Rumah utama', 4, '2025-05-26 08:30:37'),
 (4, -6.208800, 106.845600, 100.00, 2, 'Rumah utama', 7, '2025-05-27 08:04:50'),
@@ -186,7 +205,10 @@ INSERT INTO `locations` (`location_id`, `latitude`, `longitude`, `radius`, `id_a
 (17, -6.208800, 106.845600, 112.00, 2, 'Rumah utama', 20, '2025-06-19 11:10:41'),
 (18, -0.895779, 119.867997, 112.00, 2, 'Palu, Kecamatan Palu Timur, Palu, Central Sulawesi, Sulawesi, 94112, Indonesia', 21, '2025-06-19 11:23:26'),
 (19, -6.200000, 106.816666, 100.00, 2, 'Rumah John Doe', 22, '2025-06-19 11:51:15'),
-(20, 1.123068, 104.102734, 100.00, 2, 'Jalan Hang Tuah, Belian, Batam, Riau Islands, Sumatra, 29464, Indonesia', 23, '2025-06-19 12:34:51');
+(20, 1.123068, 104.102734, 100.00, 2, 'Jalan Hang Tuah, Belian, Batam, Riau Islands, Sumatra, 29464, Indonesia', 23, '2025-06-19 12:34:51'),
+(21, -6.208800, 106.845600, 100.00, 3, 'Coffee Shop di Menteng', 21, '2025-06-19 18:45:02'),
+(22, -6.208800, 106.845600, 100.00, 3, 'Coffee Shop di Menteng', 21, '2025-06-06 01:07:11'),
+(24, -6.208800, 106.845600, 150.00, 2, 'Rumah utama', 2, '2025-05-26 07:52:49');
 
 -- --------------------------------------------------------
 
@@ -342,7 +364,8 @@ INSERT INTO `settings` (`setting_key`, `setting_value`, `description`, `updated_
 ('checkin.start_time', '08:00:00', 'ontime', '0000-00-00'),
 ('checkin.late_time', '10:00:00', 'Late', '0000-00-00'),
 ('checkout.auto_time', '17:00:00', 'Cek out', '0000-00-00'),
-('checkout.flexible', 'true', 'check-out valid', '0000-00-00');
+('checkout.flexible', 'true', 'check-out valid', '0000-00-00'),
+('checkin.end_time', '18:00:00', 'Waktu paling akhir pengguna bisa melakukan check-in', '0000-00-00');
 
 -- --------------------------------------------------------
 
@@ -403,6 +426,7 @@ INSERT INTO `users` (`id_users`, `full_name`, `email`, `password`, `phone`, `nip
 -- Indexes for table `attendance`
 --
 ALTER TABLE `attendance`
+  ADD PRIMARY KEY (`id_attendance`),
   ADD KEY `fk_attendance_user_id` (`user_id`),
   ADD KEY `fk_attendance_category_id` (`category_id`),
   ADD KEY `fk_attendance_location_id` (`location_id`),
@@ -502,6 +526,12 @@ ALTER TABLE `users`
 --
 
 --
+-- AUTO_INCREMENT for table `attendance`
+--
+ALTER TABLE `attendance`
+  MODIFY `id_attendance` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+
+--
 -- AUTO_INCREMENT for table `attendance_categories`
 --
 ALTER TABLE `attendance_categories`
@@ -517,7 +547,7 @@ ALTER TABLE `attendance_statuses`
 -- AUTO_INCREMENT for table `bookings`
 --
 ALTER TABLE `bookings`
-  MODIFY `booking_id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `booking_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
 --
 -- AUTO_INCREMENT for table `booking_status`
@@ -535,7 +565,7 @@ ALTER TABLE `divisions`
 -- AUTO_INCREMENT for table `locations`
 --
 ALTER TABLE `locations`
-  MODIFY `location_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=21;
+  MODIFY `location_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=25;
 
 --
 -- AUTO_INCREMENT for table `photos`

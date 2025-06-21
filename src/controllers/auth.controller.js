@@ -67,7 +67,25 @@ export const login = async (req, res) => {
         code: 'E_LOGIN',
         message: 'Email tidak terdaftar'
       });
-    } // Check password
+    }
+    // Debug logging untuk troubleshooting role issues
+    console.log('🔍 Login Debug Info:');
+    console.log('- User ID:', user.id_users);
+    console.log('- User Email:', user.email);
+    console.log('- User id_roles:', user.id_roles);
+    console.log('- User Role Object:', user.role);
+    console.log('- Role Name:', user.role?.role_name);
+    console.log('- Full User Object (roles):', JSON.stringify(user.role, null, 2));
+
+    // Check if user has role assigned
+    if (!user.id_roles) {
+      console.log('❌ User has no role assigned (id_roles is null)');
+    } else if (!user.role) {
+      console.log('❌ Role relationship not loaded or role does not exist');
+      console.log('- Looking for role with ID:', user.id_roles);
+    }
+
+    // Check password
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       logger.warn(`Login failed - Wrong password for: ${email}`);
@@ -144,13 +162,29 @@ export const login = async (req, res) => {
         : null
     };
     if (shouldRefresh || !token) {
+      // Ensure we have the role_name for the token
+      let roleName = user.role?.role_name;
+
+      // If role_name is still not available, try to fetch it directly
+      if (!roleName && user.id_roles) {
+        try {
+          const roleData = await Role.findByPk(user.id_roles);
+          roleName = roleData?.role_name;
+          console.log('🔧 Fetched role name directly:', roleName);
+        } catch (roleError) {
+          console.error('Error fetching role:', roleError.message);
+        }
+      }
+
       const payload = {
         id: user.id_users,
         email: user.email,
         full_name: user.full_name,
-        role_name: user.role?.role_name || null,
+        role_name: roleName || null,
         photo: user.photo_file ? user.photo_file.photo_url : null
       };
+
+      console.log('🔍 Creating JWT token with payload:', payload);
 
       token = jwt.sign(payload, config.jwt.secret, {
         expiresIn: config.jwt.ttl

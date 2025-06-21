@@ -6,7 +6,7 @@ export default {
   env: process.env.NODE_ENV || 'development',
   jwt: {
     secret: process.env.JWT_SECRET || 'changeme',
-    ttl: 8 * 60 * 60 
+    ttl: 24 * 60 * 60 // 24 jam (24 * 60 * 60 detik)
   },
   db: {
     username: process.env.DB_USER,

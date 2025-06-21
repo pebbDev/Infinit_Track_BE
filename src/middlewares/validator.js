@@ -368,3 +368,71 @@ export const checkInValidation = [
       return true;
     })
 ];
+
+// Booking validation rules
+export const createBookingValidation = [
+  body('schedule_date')
+    .notEmpty()
+    .withMessage('Tanggal jadwal wajib diisi')
+    .matches(/^\d{2}-\d{2}-\d{4}$/)
+    .withMessage('Format tanggal harus DD-MM-YYYY')
+    .custom((value) => {
+      const [day, month, year] = value.split('-');
+      const date = new Date(`${year}-${month}-${day}`);
+      const today = new Date();
+      const tomorrow = new Date(today);
+      tomorrow.setDate(today.getDate() + 1);
+
+      date.setHours(0, 0, 0, 0);
+      tomorrow.setHours(0, 0, 0, 0);
+
+      if (date < tomorrow) {
+        throw new Error('Tanggal booking harus hari esok atau setelahnya');
+      }
+      return true;
+    }),
+
+  body('latitude')
+    .notEmpty()
+    .withMessage('Latitude wajib diisi')
+    .isFloat({ min: -90, max: 90 })
+    .withMessage('Latitude tidak valid')
+    .custom((value) => parseFloat(value) !== 0)
+    .withMessage('Latitude tidak boleh 0'),
+
+  body('longitude')
+    .notEmpty()
+    .withMessage('Longitude wajib diisi')
+    .isFloat({ min: -180, max: 180 })
+    .withMessage('Longitude tidak valid')
+    .custom((value) => parseFloat(value) !== 0)
+    .withMessage('Longitude tidak boleh 0'),
+
+  body('radius')
+    .optional()
+    .default(100)
+    .isFloat({ gt: 0 })
+    .withMessage('Radius harus lebih besar dari 0'),
+
+  body('description')
+    .optional()
+    .isString()
+    .trim()
+    .isLength({ max: 255 })
+    .withMessage('Deskripsi maksimal 255 karakter'),
+
+  body('notes')
+    .optional()
+    .isString()
+    .trim()
+    .isLength({ max: 500 })
+    .withMessage('Catatan maksimal 500 karakter')
+];
+
+export const updateStatusValidation = [
+  body('status')
+    .notEmpty()
+    .withMessage('Status wajib diisi')
+    .isIn(['approved', 'rejected'])
+    .withMessage('Status harus "approved" atau "rejected"')
+];
