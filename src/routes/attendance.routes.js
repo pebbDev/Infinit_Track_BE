@@ -16,7 +16,10 @@ import {
   processPastAttendances,
   manualResolveWfaBookings,
   manualCreateGeneralAlpha,
-  logLocationEvent
+  logLocationEvent,
+  getSmartCheckoutPrediction,
+  getSmartEngineConfig,
+  getEnhancedAutoCheckoutSettings
 } from '../controllers/attendance.controller.js';
 import { verifyToken } from '../middlewares/authJwt.js';
 import roleGuard from '../middlewares/roleGuard.js';
@@ -78,5 +81,14 @@ router.post(
 
 // DELETE endpoint for admin and management to delete attendance record
 router.delete('/:id', verifyToken, roleGuard(['Admin', 'Management']), deleteAttendance);
+
+// Smart checkout prediction endpoints (Admin only)
+router.post('/smart-prediction', roleGuard(['Admin', 'Management']), getSmartCheckoutPrediction);
+router.get('/smart-config', roleGuard(['Admin', 'Management']), getSmartEngineConfig);
+router.get(
+  '/enhanced-auto-checkout-settings',
+  roleGuard(['Admin', 'Management']),
+  getEnhancedAutoCheckoutSettings
+);
 
 export default router;

@@ -21,9 +21,10 @@ import { triggerAutoCheckout } from '../jobs/autoCheckout.job.js';
 import { triggerResolveWfaBookings } from '../jobs/resolveWfaBookings.job.js';
 import { triggerCreateGeneralAlpha } from '../jobs/createGeneralAlpha.job.js';
 import {
-  setupAutoCheckoutAndProcessPastDates,
-  processAllPastAttendances
-} from '../utils/setupAutoCheckout.js';
+  predictWorkDuration,
+  getSmartCheckoutConfig,
+  getPredictionWeights
+} from '../utils/smartCheckoutEngine.js';
 import logger from '../utils/logger.js';
 
 export const clockIn = async (req, res) => {
@@ -1252,10 +1253,10 @@ export const getAutoCheckoutSettings = async (req, res, next) => {
 };
 
 /**
- * Setup auto checkout configuration and process all past attendance records
+ * Setup smart auto checkout configuration and process all past attendance records
  * This endpoint will:
- * 1. Create/update the checkout.auto_time setting in database
- * 2. Process all past attendance records that haven't been checked out
+ * 1. Create/update the smart checkout configuration in database
+ * 2. Process all past attendance records using smart predictions
  */
 export const setupAutoCheckoutConfig = async (req, res, next) => {
   try {
@@ -1268,21 +1269,225 @@ export const setupAutoCheckoutConfig = async (req, res, next) => {
       });
     }
 
-    const result = await setupAutoCheckoutAndProcessPastDates();
+    const transaction = await sequelize.transaction();
 
-    res.status(200).json({
-      success: true,
-      message: 'Konfigurasi auto checkout berhasil diatur dan data masa lalu telah diproses.',
-      data: result
-    });
+    try {
+      logger.info('Setting up smart auto checkout configuration...');
+
+      // 1. Update the settings to indicate smart checkout is enabled
+      const [setting, created] = await Settings.findOrCreate({
+        where: { setting_key: 'checkout.smart_enabled' },
+        defaults: {
+          setting_key: 'checkout.smart_enabled',
+          setting_value: 'true',
+          description: 'Smart Auto Checkout menggunakan Fuzzy AHP untuk prediksi waktu pulang',
+          updated_at: new Date()
+        },
+        transaction
+      });
+
+      if (!created) {
+        await setting.update(
+          {
+            setting_value: 'true',
+            description: 'Smart Auto Checkout menggunakan Fuzzy AHP untuk prediksi waktu pulang',
+            updated_at: new Date()
+          },
+          { transaction }
+        );
+      }
+
+      // 2. Create/update fallback time setting
+      const [fallbackSetting] = await Settings.findOrCreate({
+        where: { setting_key: 'checkout.fallback_time' },
+        defaults: {
+          setting_key: 'checkout.fallback_time',
+          setting_value: '17:00:00',
+          description: 'Waktu fallback jika smart prediction gagal',
+          updated_at: new Date()
+        },
+        transaction
+      });
+
+      logger.info(`Smart checkout configuration ${created ? 'created' : 'updated'}: enabled`);
+
+      // 3. Get current Jakarta time
+      const now = new Date();
+      const jakartaOffset = 7 * 60; // UTC+7 in minutes
+      const jakartaTime = new Date(now.getTime() + jakartaOffset * 60000);
+      const currentDate = jakartaTime.toISOString().split('T')[0];
+
+      logger.info(`Processing smart auto checkout for dates before: ${currentDate}`);
+
+      // 4. Find all attendance records that need auto checkout (past dates)
+      const pendingAttendances = await Attendance.findAll({
+        where: {
+          time_out: null, // Not yet checked out
+          attendance_date: {
+            [Op.lt]: currentDate // Only past dates (not today)
+          }
+        },
+        include: [
+          {
+            model: User,
+            as: 'user',
+            attributes: ['id_users', 'full_name']
+          }
+        ],
+        transaction
+      });
+
+      logger.info(`Found ${pendingAttendances.length} past attendance records to auto checkout`);
+
+      let successCount = 0;
+      let errorCount = 0;
+      let smartPredictionCount = 0;
+      let fallbackCount = 0;
+
+      // 5. Process each attendance record with smart prediction
+      for (const attendance of pendingAttendances) {
+        try {
+          const attendanceDate = attendance.attendance_date;
+          let checkoutTime;
+          let usedSmartPrediction = false;
+
+          try {
+            // Get user's historical work pattern
+            const oneMonthAgo = new Date(attendanceDate);
+            oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+
+            const userAttendances = await Attendance.findAll({
+              where: {
+                user_id: attendance.user_id,
+                attendance_date: {
+                  [Op.between]: [oneMonthAgo.toISOString().split('T')[0], attendanceDate]
+                },
+                time_in: { [Op.not]: null },
+                time_out: { [Op.not]: null }
+              },
+              limit: 15,
+              transaction
+            });
+
+            let historicalHours = 8.0;
+            if (userAttendances.length >= 2) {
+              const totalHours = userAttendances.reduce((sum, att) => {
+                const tIn = new Date(att.time_in);
+                const tOut = new Date(att.time_out);
+                const hours = (tOut - tIn) / (1000 * 60 * 60);
+                return sum + (hours > 0 && hours <= 16 ? hours : 8);
+              }, 0);
+              historicalHours = totalHours / userAttendances.length;
+            }
+
+            const timeIn = new Date(attendance.time_in);
+            const checkinHours = timeIn.getHours() + timeIn.getMinutes() / 60;
+            const attendanceDateObj = new Date(attendanceDate);
+
+            // Get smart prediction
+            const prediction = await predictWorkDuration({
+              checkinTime: checkinHours,
+              historicalHours: historicalHours,
+              dayOfWeek: attendanceDateObj.getDay(),
+              transitionCount: Math.min(userAttendances.length, 5)
+            });
+
+            // Calculate predicted checkout time
+            checkoutTime = new Date(timeIn.getTime() + prediction.predictedDuration * 3600000);
+            usedSmartPrediction = true;
+            smartPredictionCount++;
+
+            logger.info(
+              `Smart prediction for attendance ${attendance.id_attendance}: ${prediction.predictedDuration.toFixed(2)}h (historical: ${historicalHours.toFixed(2)}h)`
+            );
+          } catch (smartError) {
+            logger.warn(
+              `Smart prediction failed for attendance ${attendance.id_attendance}, using fallback:`,
+              smartError.message
+            );
+
+            // Fallback to standard time
+            const [hours, minutes, seconds] = fallbackSetting.setting_value.split(':').map(Number);
+            checkoutTime = new Date(attendanceDate + 'T00:00:00.000Z');
+            checkoutTime.setUTCHours(hours, minutes, seconds, 0);
+            const jakartaCheckoutTime = new Date(checkoutTime.getTime() + jakartaOffset * 60000);
+            checkoutTime = jakartaCheckoutTime;
+            fallbackCount++;
+          }
+
+          // Calculate work hour
+          const timeIn = new Date(attendance.time_in);
+          const workHour = calculateWorkHour(timeIn, checkoutTime);
+
+          // Add auto checkout note with method indication
+          const methodNote = usedSmartPrediction
+            ? 'Sesi diakhiri otomatis oleh Smart Auto Checkout System.'
+            : 'Sesi diakhiri otomatis oleh sistem (fallback).';
+
+          const newNotes = attendance.notes ? attendance.notes + '\n' + methodNote : methodNote;
+
+          // Update attendance record
+          await attendance.update(
+            {
+              time_out: checkoutTime,
+              work_hour: workHour,
+              notes: newNotes,
+              updated_at: new Date()
+            },
+            { transaction }
+          );
+
+          successCount++;
+          logger.info(
+            `Smart auto checkout successful for user ${attendance.user_id}, attendance ${attendance.id_attendance}, date: ${attendanceDate}, method: ${usedSmartPrediction ? 'Smart' : 'Fallback'}`
+          );
+        } catch (error) {
+          errorCount++;
+          logger.error(
+            `Smart auto checkout failed for user ${attendance.user_id}, attendance ${attendance.id_attendance}:`,
+            error.message
+          );
+        }
+      }
+
+      await transaction.commit();
+
+      const result = {
+        success: true,
+        setting_created: created,
+        smart_checkout_enabled: true,
+        fallback_time: fallbackSetting.setting_value,
+        past_records_processed: pendingAttendances.length,
+        success_count: successCount,
+        error_count: errorCount,
+        smart_prediction_count: smartPredictionCount,
+        fallback_count: fallbackCount,
+        engine_info:
+          'Smart Auto Checkout menggunakan Fuzzy AHP untuk prediksi waktu pulang yang realistis'
+      };
+
+      logger.info(`Smart auto checkout setup completed!`);
+      logger.info(`Past dates processed: Success: ${successCount}, Errors: ${errorCount}`);
+      logger.info(`Smart predictions: ${smartPredictionCount}, Fallback: ${fallbackCount}`);
+
+      res.status(200).json({
+        success: true,
+        message:
+          'Konfigurasi Smart Auto Checkout berhasil diatur dan data masa lalu telah diproses.',
+        data: result
+      });
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
   } catch (error) {
-    logger.error('Error setting up auto checkout configuration:', error);
+    logger.error('Error setting up smart auto checkout configuration:', error);
     next(error);
   }
 };
 
 /**
- * Process all past attendance records for auto checkout (without changing settings)
+ * Process all past attendance records using smart auto checkout (without changing settings)
  */
 export const processPastAttendances = async (req, res, next) => {
   try {
@@ -1295,15 +1500,171 @@ export const processPastAttendances = async (req, res, next) => {
       });
     }
 
-    const result = await processAllPastAttendances();
+    logger.info('Processing all past attendance records with smart auto checkout...');
+
+    // Check if smart checkout is enabled
+    const smartSetting = await Settings.findOne({
+      where: { setting_key: 'checkout.smart_enabled' }
+    });
+
+    // Get fallback time setting
+    const fallbackSetting = await Settings.findOne({
+      where: { setting_key: 'checkout.fallback_time' }
+    });
+
+    const fallbackTime = fallbackSetting?.setting_value || '17:00:00';
+
+    // Get current Jakarta time
+    const now = new Date();
+    const jakartaOffset = 7 * 60; // UTC+7 in minutes
+    const currentDate = new Date(now.getTime() + jakartaOffset * 60000).toISOString().split('T')[0];
+
+    // Find all attendance records that need auto checkout
+    const pendingAttendances = await Attendance.findAll({
+      where: {
+        time_out: null,
+        attendance_date: {
+          [Op.lt]: currentDate // Only past dates
+        }
+      },
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id_users', 'full_name']
+        }
+      ]
+    });
+
+    logger.info(`Found ${pendingAttendances.length} past attendance records to process`);
+
+    let successCount = 0;
+    let errorCount = 0;
+    let smartPredictionCount = 0;
+    let fallbackCount = 0;
+
+    for (const attendance of pendingAttendances) {
+      try {
+        const attendanceDate = attendance.attendance_date;
+        let checkoutTime;
+        let usedSmartPrediction = false;
+
+        // Try smart prediction if enabled
+        if (smartSetting?.setting_value === 'true') {
+          try {
+            // Get user's historical work pattern
+            const oneMonthAgo = new Date(attendanceDate);
+            oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+
+            const userAttendances = await Attendance.findAll({
+              where: {
+                user_id: attendance.user_id,
+                attendance_date: {
+                  [Op.between]: [oneMonthAgo.toISOString().split('T')[0], attendanceDate]
+                },
+                time_in: { [Op.not]: null },
+                time_out: { [Op.not]: null }
+              },
+              limit: 15
+            });
+
+            if (userAttendances.length >= 2) {
+              const totalHours = userAttendances.reduce((sum, att) => {
+                const tIn = new Date(att.time_in);
+                const tOut = new Date(att.time_out);
+                const hours = (tOut - tIn) / (1000 * 60 * 60);
+                return sum + (hours > 0 && hours <= 16 ? hours : 8);
+              }, 0);
+              const historicalHours = totalHours / userAttendances.length;
+
+              const timeIn = new Date(attendance.time_in);
+              const checkinHours = timeIn.getHours() + timeIn.getMinutes() / 60;
+              const attendanceDateObj = new Date(attendanceDate);
+
+              const prediction = await predictWorkDuration({
+                checkinTime: checkinHours,
+                historicalHours: historicalHours,
+                dayOfWeek: attendanceDateObj.getDay(),
+                transitionCount: Math.min(userAttendances.length, 5)
+              });
+
+              checkoutTime = new Date(timeIn.getTime() + prediction.predictedDuration * 3600000);
+              usedSmartPrediction = true;
+              smartPredictionCount++;
+            }
+          } catch (smartError) {
+            logger.warn(
+              `Smart prediction failed for attendance ${attendance.id_attendance}:`,
+              smartError.message
+            );
+          }
+        }
+
+        // Fallback to traditional method if smart prediction not available or failed
+        if (!usedSmartPrediction) {
+          const [hours, minutes, seconds] = fallbackTime.split(':').map(Number);
+          checkoutTime = new Date(attendanceDate + 'T00:00:00.000Z');
+          checkoutTime.setUTCHours(hours, minutes, seconds, 0);
+          const jakartaCheckoutTime = new Date(checkoutTime.getTime() + jakartaOffset * 60000);
+          checkoutTime = jakartaCheckoutTime;
+          fallbackCount++;
+        }
+
+        // Calculate work hour
+        const timeIn = new Date(attendance.time_in);
+        const workHour = calculateWorkHour(timeIn, checkoutTime);
+
+        // Add auto checkout note
+        const methodNote = usedSmartPrediction
+          ? 'Sesi diakhiri otomatis oleh Smart Auto Checkout System.'
+          : 'Sesi diakhiri otomatis oleh sistem (fallback).';
+
+        const newNotes = attendance.notes ? attendance.notes + '\n' + methodNote : methodNote;
+
+        await attendance.update({
+          time_out: checkoutTime,
+          work_hour: workHour,
+          notes: newNotes,
+          updated_at: new Date()
+        });
+
+        successCount++;
+        logger.info(
+          `Smart auto checkout successful for attendance ${attendance.id_attendance}, date: ${attendanceDate}, method: ${usedSmartPrediction ? 'Smart' : 'Fallback'}`
+        );
+      } catch (error) {
+        errorCount++;
+        logger.error(
+          `Smart auto checkout failed for attendance ${attendance.id_attendance}:`,
+          error.message
+        );
+      }
+    }
+
+    const result = {
+      success: true,
+      total_processed: pendingAttendances.length,
+      success_count: successCount,
+      error_count: errorCount,
+      smart_prediction_count: smartPredictionCount,
+      fallback_count: fallbackCount,
+      smart_enabled: smartSetting?.setting_value === 'true',
+      fallback_time: fallbackTime
+    };
+
+    logger.info(
+      `Smart past attendance processing completed. Success: ${successCount}, Errors: ${errorCount}`
+    );
+    logger.info(`Smart predictions: ${smartPredictionCount}, Fallback: ${fallbackCount}`);
 
     res.status(200).json({
       success: true,
-      message: 'Pemrosesan data attendance masa lalu berhasil completed.',
+      message:
+        'Pemrosesan data attendance masa lalu dengan Smart Auto Checkout berhasil completed.',
       data: result
     });
   } catch (error) {
-    logger.error('Error processing past attendances:', error);
+    logger.error('Error processing past attendances with smart checkout:', error);
     next(error);
   }
 };
@@ -1437,6 +1798,231 @@ export const logLocationEvent = async (req, res, next) => {
       });
     }
 
+    next(error);
+  }
+};
+
+/**
+ * Get smart checkout prediction for a user (Admin/Management only)
+ * This endpoint provides intelligent checkout time prediction based on Fuzzy AHP
+ */
+export const getSmartCheckoutPrediction = async (req, res, next) => {
+  try {
+    // Only allow admins to access smart prediction
+    if (req.user.role_name !== 'Admin' && req.user.role_name !== 'Management') {
+      return res.status(403).json({
+        success: false,
+        message: 'Akses ditolak. Hanya admin dan manajemen yang dapat mengakses smart prediction.'
+      });
+    }    const { checkinTime, historicalHours = 8.0, dayOfWeek, transitionCount } = req.body;
+
+    // Validate required parameters (for testing endpoint)
+    if (checkinTime === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: 'Parameter checkinTime wajib diisi.'
+      });
+    }
+
+    if (typeof checkinTime !== 'number' || checkinTime < 0 || checkinTime > 24) {
+      return res.status(400).json({
+        success: false,
+        message: 'checkinTime harus berupa angka antara 0-24.'
+      });
+    }
+
+    // Use provided historicalHours or default to 8.0 for testing
+    const testHistoricalHours = typeof historicalHours === 'number' ? historicalHours : 8.0;    // Get prediction from smart engine
+    const prediction = await predictWorkDuration({
+      checkinTime: checkinTime,
+      historicalHours: testHistoricalHours,
+      dayOfWeek: dayOfWeek || new Date().getDay(),
+      transitionCount: transitionCount || 3
+    });
+
+    // Calculate predicted checkout time
+    const checkinDate = new Date();
+    checkinDate.setHours(Math.floor(checkinTime), (checkinTime % 1) * 60, 0, 0);
+    const predictedCheckoutTime = new Date(
+      checkinDate.getTime() + prediction.predictedDuration * 3600000
+    );
+
+    res.status(200).json({
+      success: true,
+      data: {
+        input: {
+          checkinTime: checkinTime,
+          historicalHours: testHistoricalHours,
+          dayOfWeek: dayOfWeek || new Date().getDay(),
+          transitionCount: transitionCount || 3
+        },
+        prediction: prediction,
+        predicted_checkout_time: predictedCheckoutTime.toISOString(),
+        predicted_duration_hours: prediction.predictedDuration.toFixed(2),
+        note: 'This is a testing endpoint with provided or default parameters'
+      }
+    });
+  } catch (error) {
+    logger.error('Error getting smart checkout prediction:', error);
+    next(error);
+  }
+};
+
+/**
+ * Get smart checkout engine configuration and weights (Admin/Management only)
+ */
+export const getSmartEngineConfig = async (req, res, next) => {
+  try {
+    // Only allow admins to access configuration
+    if (req.user.role_name !== 'Admin' && req.user.role_name !== 'Management') {
+      return res.status(403).json({
+        success: false,
+        message:
+          'Akses ditolak. Hanya admin dan manajemen yang dapat mengakses konfigurasi smart checkout.'
+      });
+    }
+
+    const config = await getSmartCheckoutConfig();
+    const weights = await getPredictionWeights();
+
+    res.status(200).json({
+      success: true,
+      data: {
+        configuration: config,
+        ahp_weights: weights,
+        description:
+          'Smart Checkout menggunakan Fuzzy AHP untuk prediksi waktu pulang yang realistis'
+      }
+    });
+  } catch (error) {
+    logger.error('Error getting smart checkout configuration:', error);
+    next(error);
+  }
+};
+
+/**
+ * Enhanced auto checkout settings with smart prediction preview
+ */
+export const getEnhancedAutoCheckoutSettings = async (req, res, next) => {
+  try {
+    // Get the auto checkout time setting from database
+    const autoTimeSetting = await Settings.findOne({
+      where: {
+        setting_key: 'checkout.auto_time'
+      }
+    });
+
+    // Get current Jakarta time
+    const now = new Date();
+    const jakartaOffset = 7 * 60; // UTC+7 in minutes
+    const jakartaTime = new Date(now.getTime() + jakartaOffset * 60000);
+    const currentTimeString = jakartaTime.toISOString().substring(11, 19);
+    const currentDate = jakartaTime.toISOString().split('T')[0];
+
+    // Find active attendances (checked in but not checked out)
+    const activeAttendances = await Attendance.findAll({
+      where: {
+        attendance_date: currentDate,
+        time_out: null
+      },
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id_users', 'full_name', 'nip_nim']
+        }
+      ]
+    });
+
+    // Generate smart predictions for active attendances
+    const smartPredictions = [];
+    for (const attendance of activeAttendances) {
+      try {
+        const timeIn = new Date(attendance.time_in);
+        const checkinHours = timeIn.getHours() + timeIn.getMinutes() / 60;
+
+        // Get user's historical pattern
+        const oneMonthAgo = new Date();
+        oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+
+        const userAttendances = await Attendance.findAll({
+          where: {
+            user_id: attendance.user_id,
+            attendance_date: {
+              [Op.gte]: oneMonthAgo.toISOString().split('T')[0]
+            },
+            time_in: { [Op.not]: null },
+            time_out: { [Op.not]: null }
+          },
+          limit: 10
+        });
+
+        let historicalHours = 8.0;
+        if (userAttendances.length > 0) {
+          const totalHours = userAttendances.reduce((sum, att) => {
+            const tIn = new Date(att.time_in);
+            const tOut = new Date(att.time_out);
+            const hours = (tOut - tIn) / (1000 * 60 * 60);
+            return sum + hours;
+          }, 0);
+          historicalHours = totalHours / userAttendances.length;
+        }
+
+        const prediction = await predictWorkDuration({
+          checkinTime: checkinHours,
+          historicalHours: historicalHours,
+          dayOfWeek: new Date().getDay(),
+          transitionCount: 3
+        });
+
+        const predictedCheckoutTime = new Date(
+          timeIn.getTime() + prediction.predictedDuration * 3600000
+        );
+
+        smartPredictions.push({
+          attendance_id: attendance.id_attendance,
+          user_id: attendance.user_id,
+          user_name: attendance.user?.full_name,
+          time_in: formatTimeOnly(attendance.time_in),
+          predicted_checkout: formatTimeOnly(predictedCheckoutTime),
+          predicted_duration: prediction.predictedDuration.toFixed(2),
+          historical_avg: historicalHours.toFixed(2)
+        });
+      } catch (error) {
+        logger.error(
+          `Error generating prediction for attendance ${attendance.id_attendance}:`,
+          error
+        );
+        smartPredictions.push({
+          attendance_id: attendance.id_attendance,
+          user_id: attendance.user_id,
+          user_name: attendance.user?.full_name,
+          time_in: formatTimeOnly(attendance.time_in),
+          prediction_error: 'Failed to generate prediction'
+        });
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        auto_checkout_time: autoTimeSetting?.setting_value || 'Not configured',
+        current_jakarta_time: currentTimeString,
+        current_date: currentDate,
+        active_attendances_count: activeAttendances.length,
+        smart_predictions: smartPredictions,
+        traditional_checkouts: activeAttendances.map((att) => ({
+          id_attendance: att.id_attendance,
+          user_id: att.user_id,
+          user_name: att.user?.full_name,
+          time_in: formatTimeOnly(att.time_in),
+          attendance_date: att.attendance_date,
+          traditional_checkout: autoTimeSetting?.setting_value || '17:00:00'
+        }))
+      }
+    });
+  } catch (error) {
+    logger.error('Error getting enhanced auto checkout settings:', error);
     next(error);
   }
 };
