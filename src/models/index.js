@@ -15,6 +15,7 @@ import Location from './location.js';
 import Settings from './settings.model.js';
 import Booking from './booking.model.js';
 import BookingStatus from './bookingStatus.model.js';
+import LocationEvent from './locationEvent.model.js';
 
 // Jalankan relasi SETELAH define semua model
 User.belongsTo(Role, { foreignKey: 'id_roles', as: 'role' });
@@ -121,5 +122,6 @@ export {
   Location,
   Settings,
   Booking,
-  BookingStatus
+  BookingStatus,
+  LocationEvent
 };

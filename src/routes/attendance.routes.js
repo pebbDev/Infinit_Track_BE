@@ -15,16 +15,25 @@ import {
   setupAutoCheckoutConfig,
   processPastAttendances,
   manualResolveWfaBookings,
-  manualCreateGeneralAlpha
+  manualCreateGeneralAlpha,
+  logLocationEvent
 } from '../controllers/attendance.controller.js';
 import { verifyToken } from '../middlewares/authJwt.js';
 import roleGuard from '../middlewares/roleGuard.js';
-import { checkInValidation, checkOutValidation, validate } from '../middlewares/validator.js';
+import {
+  checkInValidation,
+  checkOutValidation,
+  validate,
+  locationEventValidation
+} from '../middlewares/validator.js';
 
 const router = express.Router();
 
 // All attendance routes require authentication
 router.use(verifyToken);
+
+// Location event endpoint - for logging geofence enter/exit events
+router.post('/location-event', locationEventValidation, validate, logLocationEvent);
 
 // GET / - Get all attendances for admin/management with search and pagination
 router.get('/', roleGuard(['Admin', 'Management']), getAllAttendances);

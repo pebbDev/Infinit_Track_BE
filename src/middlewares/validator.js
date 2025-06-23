@@ -471,3 +471,59 @@ export const checkOutValidation = [
       return true;
     })
 ];
+
+// Location event validation rules
+export const locationEventValidation = [
+  // Event type validation
+  body('event_type')
+    .exists()
+    .withMessage('Event type wajib diisi')
+    .notEmpty()
+    .withMessage('Event type tidak boleh kosong')
+    .isIn(['ENTER', 'EXIT'])
+    .withMessage('Event type harus berupa ENTER atau EXIT'),
+
+  // Location ID validation
+  body('location_id')
+    .exists()
+    .withMessage('Location ID wajib diisi')
+    .notEmpty()
+    .withMessage('Location ID tidak boleh kosong')
+    .isInt({ min: 1 })
+    .withMessage('Location ID harus berupa integer positif'),
+  // Event timestamp validation
+  body('event_timestamp')
+    .exists()
+    .withMessage('Event timestamp wajib diisi')
+    .notEmpty()
+    .withMessage('Event timestamp tidak boleh kosong')
+    .isISO8601()
+    .withMessage('Event timestamp harus dalam format ISO 8601 yang valid')
+    .custom((value) => {
+      const eventTime = new Date(value);
+      const now = new Date();
+
+      // Convert to Jakarta time for comparison (UTC+7)
+      const jakartaOffset = 7 * 60 * 60 * 1000; // UTC+7 in milliseconds
+      const jakartaNow = new Date(now.getTime() + jakartaOffset);
+
+      // Use Jakarta time for validation
+      const eventTimeJakarta = new Date(eventTime.getTime() + jakartaOffset);
+
+      // Check if event is more than 2 hours in the future (increased tolerance for timezone issues)
+      const twoHoursFromNow = new Date(jakartaNow.getTime() + 2 * 60 * 60 * 1000);
+
+      if (eventTimeJakarta > twoHoursFromNow) {
+        throw new Error('Event timestamp tidak boleh lebih dari 2 jam ke depan');
+      }
+
+      // Check if event is more than 24 hours in the past
+      const twentyFourHoursAgo = new Date(jakartaNow.getTime() - 24 * 60 * 60 * 1000);
+
+      if (eventTimeJakarta < twentyFourHoursAgo) {
+        throw new Error('Event timestamp tidak boleh lebih dari 24 jam yang lalu');
+      }
+
+      return true;
+    })
+];

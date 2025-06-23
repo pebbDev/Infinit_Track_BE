@@ -11,7 +11,8 @@ import {
   AttendanceStatus,
   BookingStatus,
   User,
-  Role
+  Role,
+  LocationEvent
 } from '../models/index.js';
 import { calculateDistance } from '../utils/geofence.js';
 import { formatWorkHour, calculateWorkHour, formatTimeOnly } from '../utils/workHourFormatter.js';
@@ -1361,6 +1362,81 @@ export const manualCreateGeneralAlpha = async (req, res, next) => {
     });
   } catch (error) {
     logger.error('Error in manual create general alpha:', error);
+    next(error);
+  }
+};
+
+/**
+ * Log location event - lightweight endpoint for recording geofence enter/exit events
+ * This endpoint is designed to be fast and efficient for passive Android app tracking
+ *
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ */
+export const logLocationEvent = async (req, res, next) => {
+  try {
+    const { event_type, location_id, event_timestamp } = req.body;
+    const user_id = req.user.id; // Get user_id from verified JWT token
+
+    logger.info(
+      `Logging location event for user ${user_id}: ${event_type} at location ${location_id}`
+    );
+
+    // Verify that the location exists before creating the event
+    const location = await Location.findByPk(location_id);
+    if (!location) {
+      return res.status(400).json({
+        success: false,
+        message: 'Location ID tidak valid',
+        error: 'INVALID_LOCATION_ID'
+      });
+    }
+
+    // Create the location event record
+    const locationEvent = await LocationEvent.create({
+      user_id,
+      location_id,
+      event_type,
+      event_timestamp: new Date(event_timestamp)
+    });
+
+    logger.info(`Location event created successfully: ID ${locationEvent.id}`);
+
+    // Return success response
+    res.status(201).json({
+      success: true,
+      message: 'Location event berhasil dicatat',
+      data: {
+        event_id: locationEvent.id,
+        user_id: locationEvent.user_id,
+        location_id: locationEvent.location_id,
+        event_type: locationEvent.event_type,
+        event_timestamp: locationEvent.event_timestamp,
+        recorded_at: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    logger.error('Error in logLocationEvent:', error);
+
+    // Return appropriate error response
+    if (error.name === 'SequelizeValidationError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Data tidak valid',
+        error: 'VALIDATION_ERROR',
+        details: error.errors.map((err) => err.message)
+      });
+    }
+
+    if (error.name === 'SequelizeForeignKeyConstraintError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Location ID tidak ditemukan',
+        error: 'FOREIGN_KEY_CONSTRAINT'
+      });
+    }
+
     next(error);
   }
 };
