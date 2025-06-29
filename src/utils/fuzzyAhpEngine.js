@@ -79,6 +79,7 @@ const wfaFuzzyLogic = createWfaFuzzySystem();
  * Calculate AHP weights for WFA criteria with NEW configuration
  * Target: Location Type (70%), Distance (23%), Amenity (7%)
  */
+
 function getWfaAhpWeights() {
   try {
     const ahp = new AHP();
@@ -326,21 +327,317 @@ async function calculateWfaScore(placeDetails, ahpWeights = null) {
 }
 
 /**
- * Simplified discipline calculation (backward compatibility)
+ * Calculate AHP weights for discipline criteria
+ * Priority: Alpha > Keparahan Telat > Frekuensi Telat > Fokus Kerja
+ */
+function _calculateAhpWeights(matrix) {
+  try {
+    const ahp = new AHP();
+    const criteria = matrix.criteria;
+    const comparisons = matrix.comparisons;
+
+    ahp.addCriteria(criteria);
+    ahp.addItems(['dummy']);
+    ahp.rankCriteria(comparisons);
+
+    criteria.forEach((criterion) => {
+      ahp.rankCriteriaItem(criterion, [['dummy', 'dummy', 1]]);
+    });
+
+    const result = ahp.run();
+    const weights = result.criteriaRankMetaMap.weightedVector;
+
+    const weightObj = {};
+    criteria.forEach((criterion, index) => {
+      weightObj[criterion] = weights[index];
+    });
+
+    return weightObj;
+  } catch (error) {
+    logger.error('AHP calculation failed:', error);
+    // Return default weights
+    const defaultWeights = {};
+    matrix.criteria.forEach((criterion, index) => {
+      defaultWeights[criterion] = matrix.defaultWeights[index];
+    });
+    return defaultWeights;
+  }
+}
+
+/**
+ * Initialize Discipline Fuzzy Logic System
+ */
+function createDisciplineFuzzySystem() {
+  // Alpha Rate fuzzy sets (percentage of alpha days)
+  const alphaRateFS = {
+    rendah: new fuzzylogic.Triangle(0, 5, 15), // Low alpha rate (good)
+    sedang: new fuzzylogic.Triangle(10, 20, 35), // Medium alpha rate
+    tinggi: new fuzzylogic.Grade(30, 50) // High alpha rate (bad)
+  };
+
+  // Lateness Severity fuzzy sets (average minutes late)
+  const latenessSeverityFS = {
+    ringan: new fuzzylogic.Triangle(0, 5, 15), // Light lateness
+    sedang: new fuzzylogic.Triangle(10, 20, 40), // Medium lateness
+    berat: new fuzzylogic.Grade(35, 60) // Heavy lateness
+  };
+
+  // Lateness Frequency fuzzy sets (percentage of late days)
+  const latenessFrequencyFS = {
+    jarang: new fuzzylogic.Triangle(0, 10, 25), // Rarely late
+    kadang: new fuzzylogic.Triangle(20, 35, 50), // Sometimes late
+    sering: new fuzzylogic.Grade(45, 70) // Often late
+  };
+
+  // Work Focus fuzzy sets (work hour consistency score)
+  const workFocusFS = {
+    rendah: new fuzzylogic.Triangle(0, 30, 50), // Low focus
+    sedang: new fuzzylogic.Triangle(40, 60, 80), // Medium focus
+    tinggi: new fuzzylogic.Triangle(70, 85, 100) // High focus
+  };
+
+  // Output discipline score fuzzy sets
+  const disciplineScoreFS = {
+    sangat_buruk: new fuzzylogic.Triangle(0, 15, 30),
+    buruk: new fuzzylogic.Triangle(20, 40, 60),
+    cukup: new fuzzylogic.Triangle(50, 65, 80),
+    baik: new fuzzylogic.Triangle(70, 85, 95),
+    sangat_baik: new fuzzylogic.Grade(90, 100)
+  };
+
+  return {
+    inputSets: {
+      alpha_rate: alphaRateFS,
+      lateness_severity: latenessSeverityFS,
+      lateness_frequency: latenessFrequencyFS,
+      work_focus: workFocusFS
+    },
+    outputSets: {
+      discipline_score: disciplineScoreFS
+    }
+  };
+}
+
+// Initialize discipline fuzzy system globally
+const disciplineFuzzyLogic = createDisciplineFuzzySystem();
+
+/**
+ * Apply fuzzy rules for discipline calculation
+ */
+function applyDisciplineFuzzyRules(inputs) {
+  const {
+    alpha_rate: alphaMembership,
+    lateness_severity: severityMembership,
+    lateness_frequency: frequencyMembership,
+    work_focus: focusMembership
+  } = inputs;
+
+  let outputMembership = {
+    sangat_buruk: 0,
+    buruk: 0,
+    cukup: 0,
+    baik: 0,
+    sangat_baik: 0
+  };
+
+  // Core Rules: Alpha rate is primary indicator
+  // Rule 1: IF alpha_rate=tinggi THEN discipline=sangat_buruk
+  const rule1 = alphaMembership.tinggi || 0;
+  outputMembership.sangat_buruk = Math.max(outputMembership.sangat_buruk, rule1);
+
+  // Rule 2: IF alpha_rate=sedang THEN discipline=buruk
+  const rule2 = alphaMembership.sedang || 0;
+  outputMembership.buruk = Math.max(outputMembership.buruk, rule2);
+
+  // Rule 3: IF alpha_rate=rendah AND lateness_severity=berat THEN discipline=buruk
+  const rule3 = Math.min(alphaMembership.rendah || 0, severityMembership.berat || 0);
+  outputMembership.buruk = Math.max(outputMembership.buruk, rule3);
+
+  // Rule 4: IF alpha_rate=rendah AND lateness_frequency=sering THEN discipline=cukup
+  const rule4 = Math.min(alphaMembership.rendah || 0, frequencyMembership.sering || 0);
+  outputMembership.cukup = Math.max(outputMembership.cukup, rule4);
+
+  // Rule 5: IF alpha_rate=rendah AND lateness_severity=sedang AND lateness_frequency=kadang THEN discipline=cukup
+  const rule5 = Math.min(
+    alphaMembership.rendah || 0,
+    Math.min(severityMembership.sedang || 0, frequencyMembership.kadang || 0)
+  );
+  outputMembership.cukup = Math.max(outputMembership.cukup, rule5);
+
+  // Rule 6: IF alpha_rate=rendah AND lateness_severity=ringan AND work_focus=tinggi THEN discipline=baik
+  const rule6 = Math.min(
+    alphaMembership.rendah || 0,
+    Math.min(severityMembership.ringan || 0, focusMembership.tinggi || 0)
+  );
+  outputMembership.baik = Math.max(outputMembership.baik, rule6);
+
+  // Rule 7: IF alpha_rate=rendah AND lateness_frequency=jarang AND work_focus=tinggi THEN discipline=sangat_baik
+  const rule7 = Math.min(
+    alphaMembership.rendah || 0,
+    Math.min(frequencyMembership.jarang || 0, focusMembership.tinggi || 0)
+  );
+  outputMembership.sangat_baik = Math.max(outputMembership.sangat_baik, rule7);
+
+  // Rule 8: IF work_focus=tinggi AND lateness_frequency=jarang AND lateness_severity=ringan THEN discipline=sangat_baik
+  const rule8 = Math.min(
+    focusMembership.tinggi || 0,
+    Math.min(frequencyMembership.jarang || 0, severityMembership.ringan || 0)
+  );
+  outputMembership.sangat_baik = Math.max(outputMembership.sangat_baik, rule8);
+
+  // Rule 9: IF work_focus=rendah THEN discipline=buruk
+  const rule9 = focusMembership.rendah || 0;
+  outputMembership.buruk = Math.max(outputMembership.buruk, rule9 * 0.7);
+
+  // Rule 10: IF work_focus=sedang AND lateness_frequency=kadang THEN discipline=cukup
+  const rule10 = Math.min(focusMembership.sedang || 0, frequencyMembership.kadang || 0);
+  outputMembership.cukup = Math.max(outputMembership.cukup, rule10);
+
+  return outputMembership;
+}
+
+/**
+ * Defuzzify discipline output
+ */
+function defuzzifyDisciplineOutput(outputMembership) {
+  let numerator = 0;
+  let denominator = 0;
+
+  // Predefined centroids for discipline fuzzy sets
+  const centroids = {
+    sangat_buruk: 15, // Center of (0, 15, 30)
+    buruk: 40, // Center of (20, 40, 60)
+    cukup: 65, // Center of (50, 65, 80)
+    baik: 85, // Center of (70, 85, 95)
+    sangat_baik: 95 // Center of (90, 95, 100)
+  };
+
+  Object.entries(outputMembership).forEach(([label, membership]) => {
+    if (membership > 0 && centroids[label]) {
+      numerator += membership * centroids[label];
+      denominator += membership;
+    }
+  });
+
+  return denominator > 0 ? numerator / denominator : 65; // Default middle value
+}
+
+/**
+ * Enhanced Discipline Index Calculation using Fuzzy AHP
+ * Integrates fuzzy logic with AHP weights for comprehensive discipline assessment
  */
 async function calculateDisciplineIndex(userMetrics) {
-  const weights = { lateness: 0.35, absenteeism: 0.25, overtime: 0.15, consistency: 0.25 };
-  const lateness = (100 - (userMetrics.lateness_rate || 0)) * weights.lateness;
-  const attendance = (100 - (userMetrics.absenteeism_rate || 0)) * weights.absenteeism;
-  const overtime = Math.min(100, (userMetrics.overtime_frequency || 0) * 10) * weights.overtime;
-  const consistency = (userMetrics.attendance_consistency || 80) * weights.consistency;
+  try {
+    // Define AHP matrix for discipline criteria
+    const disciplineMatrix = {
+      criteria: ['alpha_rate', 'lateness_severity', 'lateness_frequency', 'work_focus'],
+      comparisons: [
+        ['alpha_rate', 'lateness_severity', 1.5], // Alpha rate > Lateness severity
+        ['alpha_rate', 'lateness_frequency', 2], // Alpha rate > Lateness frequency
+        ['alpha_rate', 'work_focus', 2.5], // Alpha rate > Work focus
+        ['lateness_severity', 'lateness_frequency', 1.3], // Severity > Frequency
+        ['lateness_severity', 'work_focus', 1.7], // Severity > Work focus
+        ['lateness_frequency', 'work_focus', 1.3] // Frequency > Work focus
+      ],
+      defaultWeights: [0.35, 0.25, 0.2, 0.2] // Fallback weights
+    };
 
-  const score = (lateness + attendance + overtime + consistency) / 100;
-  return {
-    score: Math.round(score * 100) / 100,
-    label: getDisciplineLabel(score),
-    breakdown: { lateness, attendance, overtime, consistency }
-  };
+    // Calculate AHP weights
+    const weights = _calculateAhpWeights(disciplineMatrix);
+
+    // Extract and validate metrics
+    const alphaRate = userMetrics.alpha_rate || 0; // Percentage of alpha days
+    const latenessSeverity = userMetrics.avg_lateness_minutes || 0; // Average minutes late
+    const latenessFrequency = userMetrics.lateness_frequency || 0; // Percentage of late days
+    const workFocus = userMetrics.work_hour_consistency || 75; // Work hour consistency score
+
+    logger.info('Discipline calculation inputs:', {
+      alphaRate,
+      latenessSeverity,
+      latenessFrequency,
+      workFocus
+    });
+
+    // FUZZY LOGIC INFERENCE
+    const { inputSets } = disciplineFuzzyLogic;
+
+    // 1. FUZZIFICATION - Convert crisp inputs to fuzzy memberships
+    const alphaMembership = fuzzifyInput(alphaRate, inputSets.alpha_rate);
+    const severityMembership = fuzzifyInput(latenessSeverity, inputSets.lateness_severity);
+    const frequencyMembership = fuzzifyInput(latenessFrequency, inputSets.lateness_frequency);
+    const focusMembership = fuzzifyInput(workFocus, inputSets.work_focus);
+
+    logger.info('Discipline fuzzy memberships:', {
+      alpha: alphaMembership,
+      severity: severityMembership,
+      frequency: frequencyMembership,
+      focus: focusMembership
+    });
+
+    // 2. RULE APPLICATION - Apply fuzzy rules
+    const fuzzyInputs = {
+      alpha_rate: alphaMembership,
+      lateness_severity: severityMembership,
+      lateness_frequency: frequencyMembership,
+      work_focus: focusMembership
+    };
+
+    const outputMembership = applyDisciplineFuzzyRules(fuzzyInputs);
+    logger.info('Discipline output memberships:', outputMembership);
+
+    // 3. DEFUZZIFICATION - Convert fuzzy output to crisp score
+    const fuzzyScore = defuzzifyDisciplineOutput(outputMembership);
+
+    // 4. AHP WEIGHTED CALCULATION
+    // Calculate component scores for AHP (inverted for positive scoring)
+    const alphaScore = Math.max(0, 100 - alphaRate * 2); // Lower alpha rate = higher score
+    const severityScore = Math.max(0, 100 - latenessSeverity * 2); // Lower lateness = higher score
+    const frequencyScore = Math.max(0, 100 - latenessFrequency); // Lower frequency = higher score
+    const focusScore = workFocus; // Direct score
+
+    const ahpScore =
+      alphaScore * weights.alpha_rate +
+      severityScore * weights.lateness_severity +
+      frequencyScore * weights.lateness_frequency +
+      focusScore * weights.work_focus;
+
+    // 5. HYBRID APPROACH - Combine fuzzy logic with AHP
+    const finalScore = Math.min(100, Math.max(0, fuzzyScore * 0.6 + ahpScore * 0.4));
+
+    const label = getDisciplineLabel(finalScore);
+
+    logger.info(
+      `📊 DISCIPLINE INDEX: ${finalScore.toFixed(1)} (${label}) - Fuzzy: ${fuzzyScore.toFixed(1)}, AHP: ${ahpScore.toFixed(1)}`
+    );
+
+    return {
+      score: Math.round(finalScore * 100) / 100,
+      label,
+      breakdown: {
+        alpha_rate: alphaRate,
+        lateness_severity: latenessSeverity,
+        lateness_frequency: latenessFrequency,
+        work_focus: workFocus,
+        fuzzy_score: Math.round(fuzzyScore * 100) / 100,
+        ahp_score: Math.round(ahpScore * 100) / 100,
+        weights_used: weights,
+        fuzzy_memberships: {
+          alpha: alphaMembership,
+          severity: severityMembership,
+          frequency: frequencyMembership,
+          focus: focusMembership
+        },
+        output_memberships: outputMembership
+      }
+    };
+  } catch (error) {
+    logger.error('Error calculating discipline index:', error);
+    return {
+      score: 50,
+      label: 'Cukup Disiplin',
+      breakdown: { error: error.message }
+    };
+  }
 }
 
 /**
