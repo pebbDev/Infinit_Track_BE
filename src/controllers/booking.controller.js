@@ -1,4 +1,5 @@
 import { Op } from 'sequelize';
+import { parse, startOfTomorrow, isBefore, startOfDay } from 'date-fns';
 
 import sequelize from '../config/database.js';
 import { Booking, Location, BookingStatus, User, Position, Role } from '../models/index.js';
@@ -6,30 +7,32 @@ import { Booking, Location, BookingStatus, User, Position, Role } from '../model
 // BAGIAN 1: Endpoint Membuat Booking (POST /api/bookings)
 export const createBooking = async (req, res, next) => {
   const transaction = await sequelize.transaction();
-
   try {
     const userId = req.user.id;
-    const { schedule_date, latitude, longitude, radius = 100, description, notes = '' } = req.body;
+    const { schedule_date, latitude, longitude, radius = 100, description, notes = '' } = req.body; // Parse tanggal menggunakan date-fns untuk akurasi timezone
+    // Format input: "DD-MM-YYYY" -> parse dengan format "dd-MM-yyyy"
+    const scheduleDate = parse(schedule_date, 'dd-MM-yyyy', new Date());
 
-    // Validasi format tanggal dan konversi
-    const [day, month, year] = schedule_date.split('-');
-    const scheduleDate = new Date(`${year}-${month}-${day}`);
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(today.getDate() + 1);
+    // Tentukan "hari esok" berdasarkan timezone Asia/Jakarta
+    const tomorrowStart = startOfTomorrow();
 
-    // Set waktu ke awal hari untuk perbandingan yang akurat
-    scheduleDate.setHours(0, 0, 0, 0);
-    tomorrow.setHours(0, 0, 0, 0);
-
-    // Validasi: tanggal harus besok atau setelahnya
-    if (scheduleDate < tomorrow) {
+    // Validasi: tanggal booking harus "hari esok" atau setelahnya
+    // Bandingkan "awal hari" dari tanggal booking dengan "awal hari esok"
+    const bookingStart = startOfDay(scheduleDate);
+    if (isBefore(bookingStart, tomorrowStart)) {
       await transaction.rollback();
       return res.status(400).json({
         success: false,
         message: 'Tanggal booking harus hari esok atau setelahnya.'
       });
-    } // Cek apakah user sudah memiliki booking pending
+    }
+
+    // Format tanggal untuk database (YYYY-MM-DD) tanpa konversi timezone
+    // Gunakan komponen tanggal langsung untuk menghindari timezone shift
+    const year = scheduleDate.getFullYear();
+    const month = String(scheduleDate.getMonth() + 1).padStart(2, '0');
+    const day = String(scheduleDate.getDate()).padStart(2, '0');
+    const formattedScheduleDate = `${year}-${month}-${day}`; // Cek apakah user sudah memiliki booking pending
     const existingPendingBooking = await Booking.findOne({
       where: {
         user_id: userId,
@@ -44,13 +47,11 @@ export const createBooking = async (req, res, next) => {
         success: false,
         message: 'Anda sudah memiliki pengajuan booking yang aktif.'
       });
-    }
-
-    // Cek booking conflict pada tanggal yang sama (WFA vs WFO/WFH)
+    } // Cek booking conflict pada tanggal yang sama (WFA vs WFO/WFH)
     const existingBookingOnDate = await Booking.findOne({
       where: {
         user_id: userId,
-        schedule_date: scheduleDate.toISOString().split('T')[0],
+        schedule_date: formattedScheduleDate,
         status: { [Op.in]: [1, 3] } // approved (1) atau pending (3)
       },
       transaction
@@ -77,13 +78,11 @@ export const createBooking = async (req, res, next) => {
         description: description || 'WFA Location'
       },
       { transaction }
-    );
-
-    // 2. Buat entri baru di tabel bookings
+    ); // 2. Buat entri baru di tabel bookings
     const newBooking = await Booking.create(
       {
         user_id: userId,
-        schedule_date: scheduleDate.toISOString().split('T')[0], // YYYY-MM-DD format
+        schedule_date: formattedScheduleDate, // YYYY-MM-DD format
         location_id: newLocation.location_id,
         notes: notes,
         status: 3, // pending

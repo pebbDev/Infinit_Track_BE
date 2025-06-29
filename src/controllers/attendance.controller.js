@@ -358,17 +358,22 @@ export const checkIn = async (req, res, next) => {
     const lateTime = settingsMap['checkin.late_time'] || '10:00:00';
     const holidayCheckinEnabled = settingsMap['workday.holiday_checkin_enabled'] === 'true';
     const weekendCheckinEnabled = settingsMap['workday.weekend_checkin_enabled'] === 'true';
-    const holidayRegion = settingsMap['workday.holiday_region'] || 'ID'; // 3. Validasi Hari Libur
-    const hd = new Holidays(holidayRegion);
-    const isHoliday = hd.isHoliday(localTime);
-    const isWeekend = localTime.getDay() === 0 || localTime.getDay() === 6;
+    const holidayRegion = settingsMap['workday.holiday_region'] || 'ID';
 
-    if ((isHoliday && !holidayCheckinEnabled) || (isWeekend && !weekendCheckinEnabled)) {
-      await transaction.rollback();
-      return res.status(400).json({
-        success: false,
-        message: 'Check-in tidak diizinkan pada hari libur.'
-      });
+    // 3. Validasi Hari Libur - HANYA untuk WFO (category_id = 1) dan WFH (category_id = 2)
+    // WFA (category_id = 3) SKIP validasi ini sepenuhnya
+    if (category_id === 1 || category_id === 2) {
+      const hd = new Holidays(holidayRegion);
+      const isHoliday = hd.isHoliday(localTime);
+      const isWeekend = localTime.getDay() === 0 || localTime.getDay() === 6;
+
+      if ((isHoliday && !holidayCheckinEnabled) || (isWeekend && !weekendCheckinEnabled)) {
+        await transaction.rollback();
+        return res.status(400).json({
+          success: false,
+          message: 'Check-in tidak diizinkan pada hari libur.'
+        });
+      }
     } // 4. Validasi Jam Kerja
     // Calculate time using proper Jakarta timezone - parse from ISO string
     const jakartaTimeISO = localTime.toISOString();
