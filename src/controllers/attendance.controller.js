@@ -195,14 +195,15 @@ export const getAttendanceHistory = async (req, res) => {
         limit: parseInt(limit),
         offset: offset
       })
-    ]); // Process summary data
+    ]); // Process summary data with updated status mapping
     const summary = {
       total_ontime: 0,
       total_late: 0,
+      total_early: 0,
       total_alpha: 0,
       total_wfo: 0,
       total_wfa: 0
-    }; // Map status counts (assuming: 1=ontime, 2=late, 3=alpha)
+    }; // Map status counts with dynamic status logic: 1=ontime, 2=late, 4=early, 3=alpha
     summaryByStatus.forEach((item) => {
       const count = parseInt(item.count);
 
@@ -212,6 +213,9 @@ export const getAttendanceHistory = async (req, res) => {
           break;
         case 2:
           summary.total_late = count;
+          break;
+        case 4:
+          summary.total_early = count;
           break;
         case 3:
           summary.total_alpha = count;
@@ -537,16 +541,42 @@ export const checkIn = async (req, res, next) => {
 
       validatedLocationId = booking.location.location_id;
       validatedBookingId = booking_id;
-    } // 6. Determine Attendance Status (ontime vs late)
+    } // 6. Determine Attendance Status Dynamically (early, ontime, late)
     const lateTimeMinutes =
       parseInt(lateTime.split(':')[0]) * 60 + parseInt(lateTime.split(':')[1]);
-    const statusId = currentTimeMinutes > lateTimeMinutes ? 2 : 1; // 2 = late, 1 = ontime
 
-    // 7. Save Data to Database
+    let determinedStatusId;
+    let statusLabel;
+
+    // Logika penentuan status berdasarkan aturan dinamis dari database:
+    if (currentTimeMinutes < checkinStartMinutes) {
+      // Early: waktu check-in < checkin.start_time
+      determinedStatusId = 4; // Early status (sesuai dengan prasyarat tabel attendance_statuses)
+      statusLabel = 'EARLY';
+      logger.info(
+        `Check-in classified as EARLY: ${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')} < ${checkinStartTime}`
+      );
+    } else if (currentTimeMinutes > lateTimeMinutes) {
+      // Late: waktu check-in > checkin.late_time
+      determinedStatusId = 2; // Late status
+      statusLabel = 'LATE';
+      logger.info(
+        `Check-in classified as LATE: ${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')} > ${lateTime}`
+      );
+    } else {
+      // On Time: between start_time and late_time
+      determinedStatusId = 1; // On time status
+      statusLabel = 'ON TIME';
+      logger.info(
+        `Check-in classified as ON TIME: ${checkinStartTime} <= ${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')} <= ${lateTime}`
+      );
+    }
+
+    // 7. Save Data to Database dengan status yang telah ditentukan secara dinamis
     const attendanceData = {
       user_id: userId,
       category_id: category_id,
-      status_id: statusId,
+      status_id: determinedStatusId, // <-- GUNAKAN VARIABEL HASIL LOGIKA DINAMIS
       location_id: validatedLocationId, // This will contain actual location_id for WFO
       booking_id: validatedBookingId,
       time_in: localTime,
@@ -559,11 +589,22 @@ export const checkIn = async (req, res, next) => {
     const newAttendance = await Attendance.create(attendanceData, { transaction });
     await transaction.commit();
 
-    // 8. Send Success Response (HTTP 201 Created)
+    // 8. Send Success Response dengan informasi status yang telah ditentukan
     res.status(201).json({
       success: true,
-      data: newAttendance,
-      message: 'Check-in berhasil'
+      data: {
+        ...newAttendance.toJSON(),
+        status_classification: {
+          status_id: determinedStatusId,
+          status_label: statusLabel,
+          check_in_time: `${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}`,
+          time_rules: {
+            start_time: checkinStartTime,
+            late_time: lateTime
+          }
+        }
+      },
+      message: `Check-in berhasil dengan status: ${statusLabel}`
     });
   } catch (error) {
     await transaction.rollback();

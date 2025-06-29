@@ -131,6 +131,7 @@ export const getSummaryReport = async (req, res, next) => {
     const summary = {
       total_ontime: 0,
       total_late: 0,
+      total_early: 0,
       total_alpha: 0,
       total_wfo: 0,
       total_wfh: 0,
@@ -142,7 +143,7 @@ export const getSummaryReport = async (req, res, next) => {
       const statusName = item.status?.attendance_status_name || 'unknown';
       const total = parseInt(item.dataValues.total);
 
-      // Mapping status ke field summary
+      // Mapping status ke field summary dengan dukungan dynamic status logic
       switch (statusName.toLowerCase()) {
         case 'tepat waktu':
         case 'ontime':
@@ -151,6 +152,10 @@ export const getSummaryReport = async (req, res, next) => {
         case 'terlambat':
         case 'late':
           summary.total_late = total;
+          break;
+        case 'early':
+        case 'lebih awal':
+          summary.total_early = total;
           break;
         case 'alpa':
         case 'alpha':

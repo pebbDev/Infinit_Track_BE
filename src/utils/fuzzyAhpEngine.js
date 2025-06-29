@@ -395,7 +395,12 @@ function getCheckoutPredictionAhpWeights() {
     };
   } catch (error) {
     logger.error('AHP calculation failed for checkout prediction:', error);
-    return { historical_pattern: 0.4, checkin_time: 0.25, day_context: 0.2, transition_factor: 0.15 };
+    return {
+      historical_pattern: 0.4,
+      checkin_time: 0.25,
+      day_context: 0.2,
+      transition_factor: 0.15
+    };
   }
 }
 
@@ -621,7 +626,8 @@ async function predictCheckoutTime(dailyContext, ahpWeights = null) {
     logger.error('Error in smart checkout prediction:', error);
     // Fallback to simple historical average with slight adjustment
     const baseDuration = dailyContext.historicalHours || 8.0;
-    const checkinAdjustment = dailyContext.checkinTime > 9 ? -1.0 : dailyContext.checkinTime < 7 ? 0.5 : 0;
+    const checkinAdjustment =
+      dailyContext.checkinTime > 9 ? -1.0 : dailyContext.checkinTime < 7 ? 0.5 : 0;
     return Math.max(4, Math.min(12, baseDuration + checkinAdjustment));
   }
 }
