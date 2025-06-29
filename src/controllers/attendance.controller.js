@@ -1894,9 +1894,11 @@ export const getSmartEngineConfig = async (req, res, next) => {
       data: {
         ahp_weights: weights,
         fuzzy_sets: {
-          checkinTime: Object.keys(fuzzyEngine.CHECKOUT_FUZZY_SETS.checkinTime),
-          historicalHours: Object.keys(fuzzyEngine.CHECKOUT_FUZZY_SETS.historicalHours),
-          dayOfWeek: Object.keys(fuzzyEngine.CHECKOUT_FUZZY_SETS.dayOfWeek)
+          checkin_time: ['pagi', 'siang', 'sore'],
+          historical_hours: ['pendek', 'normal', 'panjang'],
+          transition_count: ['rendah', 'sedang', 'tinggi'],
+          day_of_week: ['awal_minggu', 'tengah_minggu', 'akhir_minggu'],
+          output_duration: ['pendek', 'normal', 'panjang']
         },
         criteria_definitions: {
           checkin_time: 'Waktu check-in dalam format jam (0-24)',

@@ -350,22 +350,280 @@ function getDisciplineAhpWeights() {
   return { lateness: 0.35, absenteeism: 0.25, overtime: 0.15, consistency: 0.25 };
 }
 
+/**
+ * Calculate AHP weights for checkout prediction criteria
+ * Priority: Historical Pattern (40%) > Checkin Time (25%) > Day Context (20%) > Transition Factor (15%)
+ */
 function getCheckoutPredictionAhpWeights() {
-  return { checkin_time: 0.25, historical_pattern: 0.4, day_context: 0.2, transition_factor: 0.15 };
+  try {
+    const ahp = new AHP();
+    const criteria = ['historical_pattern', 'checkin_time', 'day_context', 'transition_factor'];
+
+    // AHP comparison matrix for checkout prediction weights
+    const comparisonMatrix = [
+      ['historical_pattern', 'checkin_time', 1.6], // 40% vs 25% ≈ 1.6:1
+      ['historical_pattern', 'day_context', 2], // 40% vs 20% = 2:1
+      ['historical_pattern', 'transition_factor', 2.67], // 40% vs 15% ≈ 2.67:1
+      ['checkin_time', 'day_context', 1.25], // 25% vs 20% = 1.25:1
+      ['checkin_time', 'transition_factor', 1.67], // 25% vs 15% ≈ 1.67:1
+      ['day_context', 'transition_factor', 1.33] // 20% vs 15% ≈ 1.33:1
+    ];
+
+    ahp.addCriteria(criteria);
+    ahp.addItems(['dummy']);
+    ahp.rankCriteria(comparisonMatrix);
+
+    criteria.forEach((criterion) => {
+      ahp.rankCriteriaItem(criterion, [['dummy', 'dummy', 1]]);
+    });
+
+    const result = ahp.run();
+    const weights = result.criteriaRankMetaMap.weightedVector;
+
+    logger.info('Checkout Prediction AHP Weights:', {
+      historical_pattern: weights[0],
+      checkin_time: weights[1],
+      day_context: weights[2],
+      transition_factor: weights[3]
+    });
+
+    return {
+      historical_pattern: weights[0],
+      checkin_time: weights[1],
+      day_context: weights[2],
+      transition_factor: weights[3]
+    };
+  } catch (error) {
+    logger.error('AHP calculation failed for checkout prediction:', error);
+    return { historical_pattern: 0.4, checkin_time: 0.25, day_context: 0.2, transition_factor: 0.15 };
+  }
 }
 
 /**
- * Simplified checkout prediction (backward compatibility)
+ * Initialize Checkout Prediction Fuzzy Logic System
  */
-async function predictCheckoutTime(dailyContext) {
-  const baseDuration = dailyContext.historicalHours || 8.0;
-  const checkinHour = dailyContext.checkinTime || 8;
+function createCheckoutFuzzySystem() {
+  // Checkin Time fuzzy sets (hours in 24-hour format)
+  const checkinTimeFS = {
+    pagi: new fuzzylogic.Triangle(6, 8, 10), // Early morning
+    siang: new fuzzylogic.Triangle(9, 11, 13), // Mid morning to noon
+    sore: new fuzzylogic.Triangle(12, 14, 16) // Afternoon
+  };
 
-  let adjustment = 0;
-  if (checkinHour < 7) adjustment = 0.5;
-  if (checkinHour > 9) adjustment = -1.0;
+  // Historical Hours fuzzy sets (average work duration)
+  const historicalHoursFS = {
+    pendek: new fuzzylogic.Triangle(4, 6, 7), // Short workdays
+    normal: new fuzzylogic.Triangle(6.5, 8, 9.5), // Normal workdays
+    panjang: new fuzzylogic.Triangle(9, 10, 12) // Long workdays
+  };
 
-  return Math.max(4, Math.min(12, baseDuration + adjustment));
+  // Transition Count fuzzy sets (mobility during day)
+  const transitionCountFS = {
+    rendah: new fuzzylogic.Triangle(0, 1, 3), // Low mobility
+    sedang: new fuzzylogic.Triangle(2, 4, 6), // Medium mobility
+    tinggi: new fuzzylogic.Grade(5, 10) // High mobility
+  };
+
+  // Day of Week fuzzy sets
+  const dayOfWeekFS = {
+    awal_minggu: new fuzzylogic.Triangle(1, 2, 3), // Monday-Tuesday
+    tengah_minggu: new fuzzylogic.Triangle(2, 3, 4), // Tuesday-Wednesday
+    akhir_minggu: new fuzzylogic.Triangle(4, 5, 6) // Thursday-Friday
+  };
+
+  // Output duration fuzzy sets (predicted work hours)
+  const durationFS = {
+    pendek: new fuzzylogic.Triangle(4, 6, 7),
+    normal: new fuzzylogic.Triangle(6.5, 8, 9.5),
+    panjang: new fuzzylogic.Triangle(9, 10, 12)
+  };
+
+  return {
+    inputSets: {
+      checkin_time: checkinTimeFS,
+      historical_hours: historicalHoursFS,
+      transition_count: transitionCountFS,
+      day_of_week: dayOfWeekFS
+    },
+    outputSets: {
+      duration: durationFS
+    }
+  };
+}
+
+// Initialize checkout fuzzy system globally
+const checkoutFuzzyLogic = createCheckoutFuzzySystem();
+
+/**
+ * Apply fuzzy rules for checkout prediction
+ */
+function applyCheckoutFuzzyRules(inputs) {
+  const {
+    checkin_time: checkinMembership,
+    historical_hours: histMembership,
+    transition_count: transMembership,
+    day_of_week: dayMembership
+  } = inputs;
+
+  let outputMembership = {
+    pendek: 0,
+    normal: 0,
+    panjang: 0
+  };
+
+  // Core Rules: Historical pattern is primary predictor
+  // Rule 1: IF historical_hours=panjang THEN duration=panjang
+  const rule1 = histMembership.panjang || 0;
+  outputMembership.panjang = Math.max(outputMembership.panjang, rule1);
+
+  // Rule 2: IF historical_hours=normal THEN duration=normal
+  const rule2 = histMembership.normal || 0;
+  outputMembership.normal = Math.max(outputMembership.normal, rule2);
+
+  // Rule 3: IF historical_hours=pendek THEN duration=pendek
+  const rule3 = histMembership.pendek || 0;
+  outputMembership.pendek = Math.max(outputMembership.pendek, rule3);
+
+  // Checkin Time Adjustment Rules
+  // Rule 4: IF checkin_time=sore THEN duration=pendek (late start = shorter day)
+  const rule4 = checkinMembership.sore || 0;
+  outputMembership.pendek = Math.max(outputMembership.pendek, rule4);
+
+  // Rule 5: IF checkin_time=pagi AND historical_hours=normal THEN duration=panjang
+  const rule5 = Math.min(checkinMembership.pagi || 0, histMembership.normal || 0);
+  outputMembership.panjang = Math.max(outputMembership.panjang, rule5);
+
+  // Day Context Rules
+  // Rule 6: IF day=akhir_minggu THEN duration=pendek (Friday effect)
+  const rule6 = dayMembership.akhir_minggu || 0;
+  outputMembership.pendek = Math.max(outputMembership.pendek, rule6 * 0.7);
+
+  // Rule 7: IF day=tengah_minggu AND historical_hours=normal THEN duration=normal
+  const rule7 = Math.min(dayMembership.tengah_minggu || 0, histMembership.normal || 0);
+  outputMembership.normal = Math.max(outputMembership.normal, rule7);
+
+  // Transition/Mobility Rules
+  // Rule 8: IF transition_count=tinggi THEN duration=normal (high mobility = normal workday)
+  const rule8 = transMembership.tinggi || 0;
+  outputMembership.normal = Math.max(outputMembership.normal, rule8 * 0.6);
+
+  // Rule 9: IF transition_count=rendah AND historical_hours=panjang THEN duration=panjang
+  const rule9 = Math.min(transMembership.rendah || 0, histMembership.panjang || 0);
+  outputMembership.panjang = Math.max(outputMembership.panjang, rule9);
+
+  // Rule 10: IF checkin_time=siang AND transition_count=sedang THEN duration=normal
+  const rule10 = Math.min(checkinMembership.siang || 0, transMembership.sedang || 0);
+  outputMembership.normal = Math.max(outputMembership.normal, rule10);
+
+  return outputMembership;
+}
+
+/**
+ * Defuzzify checkout prediction output
+ */
+function defuzzifyCheckoutOutput(outputMembership) {
+  let numerator = 0;
+  let denominator = 0;
+
+  // Predefined centroids for duration fuzzy sets
+  const centroids = {
+    pendek: 6, // Center of (4, 6, 7)
+    normal: 8, // Center of (6.5, 8, 9.5)
+    panjang: 10 // Center of (9, 10, 12)
+  };
+
+  Object.entries(outputMembership).forEach(([label, membership]) => {
+    if (membership > 0 && centroids[label]) {
+      numerator += membership * centroids[label];
+      denominator += membership;
+    }
+  });
+
+  return denominator > 0 ? numerator / denominator : 8; // Default 8 hours
+}
+
+/**
+ * Smart Checkout Time Prediction using Fuzzy AHP
+ * Enhanced implementation with proper fuzzy logic inference
+ */
+async function predictCheckoutTime(dailyContext, ahpWeights = null) {
+  try {
+    const weights = ahpWeights || getCheckoutPredictionAhpWeights();
+
+    // Extract and validate input parameters
+    const checkinTime = dailyContext.checkinTime || 8; // Hour of checkin
+    const historicalHours = dailyContext.historicalHours || 8.0; // Average historical work hours
+    const transitionCount = dailyContext.transitionCount || 0; // Location transitions today
+    const dayOfWeek = dailyContext.dayOfWeek || 1; // Day of week (1=Monday)
+
+    logger.info('Checkout prediction inputs:', {
+      checkinTime,
+      historicalHours,
+      transitionCount,
+      dayOfWeek
+    });
+
+    // FUZZY LOGIC INFERENCE
+    const { inputSets } = checkoutFuzzyLogic;
+
+    // 1. FUZZIFICATION - Convert crisp inputs to fuzzy memberships
+    const checkinMembership = fuzzifyInput(checkinTime, inputSets.checkin_time);
+    const historicalMembership = fuzzifyInput(historicalHours, inputSets.historical_hours);
+    const transitionMembership = fuzzifyInput(transitionCount, inputSets.transition_count);
+    const dayMembership = fuzzifyInput(dayOfWeek, inputSets.day_of_week);
+
+    logger.info('Fuzzy memberships:', {
+      checkin: checkinMembership,
+      historical: historicalMembership,
+      transition: transitionMembership,
+      day: dayMembership
+    });
+
+    // 2. RULE APPLICATION - Apply fuzzy rules
+    const fuzzyInputs = {
+      checkin_time: checkinMembership,
+      historical_hours: historicalMembership,
+      transition_count: transitionMembership,
+      day_of_week: dayMembership
+    };
+
+    const outputMembership = applyCheckoutFuzzyRules(fuzzyInputs);
+    logger.info('Output memberships:', outputMembership);
+
+    // 3. DEFUZZIFICATION - Convert fuzzy output to crisp duration
+    const fuzzyDuration = defuzzifyCheckoutOutput(outputMembership);
+
+    // 4. AHP WEIGHTED ADJUSTMENT
+    // Calculate component scores for AHP
+    const historicalScore = Math.min(Math.max(historicalHours, 4), 12); // Normalize to 4-12 range
+    const checkinScore = checkinTime < 8 ? 9 : checkinTime > 10 ? 7 : 8; // Early=9, Normal=8, Late=7
+    const dayScore = dayOfWeek === 5 ? 7 : dayOfWeek === 1 ? 8.5 : 8; // Friday=7, Monday=8.5, Other=8
+    const transitionScore = transitionCount > 5 ? 7.5 : transitionCount < 2 ? 8.5 : 8; // High=7.5, Low=8.5, Medium=8
+
+    const ahpScore =
+      historicalScore * weights.historical_pattern +
+      checkinScore * weights.checkin_time +
+      dayScore * weights.day_context +
+      transitionScore * weights.transition_factor;
+
+    // 5. HYBRID APPROACH - Combine fuzzy logic with AHP
+    const finalDuration = fuzzyDuration * 0.7 + ahpScore * 0.3;
+
+    // 6. Apply constraints and validations
+    const predictedDuration = Math.min(Math.max(finalDuration, 4), 12); // Constrain to 4-12 hours
+
+    logger.info(
+      `🕐 CHECKOUT PREDICTION: ${predictedDuration.toFixed(2)}h (Fuzzy: ${fuzzyDuration.toFixed(2)}h, AHP: ${ahpScore.toFixed(2)}h)`
+    );
+
+    return predictedDuration;
+  } catch (error) {
+    logger.error('Error in smart checkout prediction:', error);
+    // Fallback to simple historical average with slight adjustment
+    const baseDuration = dailyContext.historicalHours || 8.0;
+    const checkinAdjustment = dailyContext.checkinTime > 9 ? -1.0 : dailyContext.checkinTime < 7 ? 0.5 : 0;
+    return Math.max(4, Math.min(12, baseDuration + checkinAdjustment));
+  }
 }
 
 // ==========================================
