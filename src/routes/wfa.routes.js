@@ -3,12 +3,19 @@ import express from 'express';
 import {
   getWfaRecommendations,
   getWfaAhpConfig,
-  testFuzzyAhp
+  testFuzzyAhp,
+  debugGeoapifyApi
 } from '../controllers/wfa.controller.js';
 import { verifyToken } from '../middlewares/authJwt.js';
 import roleGuard from '../middlewares/roleGuard.js';
 
 const router = express.Router();
+
+// Debug endpoint (temporary no auth for testing)
+router.get('/debug-geoapify', debugGeoapifyApi);
+
+// Temporary WFA recommendations without auth for testing
+router.get('/recommendations-test', getWfaRecommendations);
 
 // All WFA routes require authentication
 router.use(verifyToken);

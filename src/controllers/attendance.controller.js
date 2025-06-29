@@ -20,11 +20,7 @@ import { applySearch } from '../utils/searchHelper.js';
 import { triggerAutoCheckout } from '../jobs/autoCheckout.job.js';
 import { triggerResolveWfaBookings } from '../jobs/resolveWfaBookings.job.js';
 import { triggerCreateGeneralAlpha } from '../jobs/createGeneralAlpha.job.js';
-import {
-  predictWorkDuration,
-  getSmartCheckoutConfig,
-  getPredictionWeights
-} from '../utils/smartCheckoutEngine.js';
+import fuzzyEngine from '../utils/fuzzyAhpEngine.js';
 import logger from '../utils/logger.js';
 
 export const clockIn = async (req, res) => {
@@ -1379,26 +1375,23 @@ export const setupAutoCheckoutConfig = async (req, res, next) => {
               }, 0);
               historicalHours = totalHours / userAttendances.length;
             }
-
             const timeIn = new Date(attendance.time_in);
             const checkinHours = timeIn.getHours() + timeIn.getMinutes() / 60;
             const attendanceDateObj = new Date(attendanceDate);
 
-            // Get smart prediction
-            const prediction = await predictWorkDuration({
+            // Get smart prediction using imported function
+            const predictedDuration = await fuzzyEngine.predictCheckoutTime({
               checkinTime: checkinHours,
               historicalHours: historicalHours,
               dayOfWeek: attendanceDateObj.getDay(),
               transitionCount: Math.min(userAttendances.length, 5)
-            });
-
-            // Calculate predicted checkout time
-            checkoutTime = new Date(timeIn.getTime() + prediction.predictedDuration * 3600000);
+            }); // Calculate predicted checkout time
+            checkoutTime = new Date(timeIn.getTime() + predictedDuration * 3600000);
             usedSmartPrediction = true;
             smartPredictionCount++;
 
             logger.info(
-              `Smart prediction for attendance ${attendance.id_attendance}: ${prediction.predictedDuration.toFixed(2)}h (historical: ${historicalHours.toFixed(2)}h)`
+              `Smart prediction for attendance ${attendance.id_attendance}: ${predictedDuration.toFixed(2)}h (historical: ${historicalHours.toFixed(2)}h)`
             );
           } catch (smartError) {
             logger.warn(
@@ -1576,19 +1569,19 @@ export const processPastAttendances = async (req, res, next) => {
                 return sum + (hours > 0 && hours <= 16 ? hours : 8);
               }, 0);
               const historicalHours = totalHours / userAttendances.length;
-
               const timeIn = new Date(attendance.time_in);
               const checkinHours = timeIn.getHours() + timeIn.getMinutes() / 60;
               const attendanceDateObj = new Date(attendanceDate);
 
-              const prediction = await predictWorkDuration({
+              // Get smart prediction using imported function
+              const predictedDuration = await fuzzyEngine.predictCheckoutTime({
                 checkinTime: checkinHours,
                 historicalHours: historicalHours,
                 dayOfWeek: attendanceDateObj.getDay(),
                 transitionCount: Math.min(userAttendances.length, 5)
               });
 
-              checkoutTime = new Date(timeIn.getTime() + prediction.predictedDuration * 3600000);
+              checkoutTime = new Date(timeIn.getTime() + predictedDuration * 3600000);
               usedSmartPrediction = true;
               smartPredictionCount++;
             }
@@ -1814,7 +1807,8 @@ export const getSmartCheckoutPrediction = async (req, res, next) => {
         success: false,
         message: 'Akses ditolak. Hanya admin dan manajemen yang dapat mengakses smart prediction.'
       });
-    }    const { checkinTime, historicalHours = 8.0, dayOfWeek, transitionCount } = req.body;
+    }
+    const { checkinTime, historicalHours = 8.0, dayOfWeek, transitionCount } = req.body;
 
     // Validate required parameters (for testing endpoint)
     if (checkinTime === undefined) {
@@ -1832,20 +1826,25 @@ export const getSmartCheckoutPrediction = async (req, res, next) => {
     }
 
     // Use provided historicalHours or default to 8.0 for testing
-    const testHistoricalHours = typeof historicalHours === 'number' ? historicalHours : 8.0;    // Get prediction from smart engine
-    const prediction = await predictWorkDuration({
-      checkinTime: checkinTime,
-      historicalHours: testHistoricalHours,
-      dayOfWeek: dayOfWeek || new Date().getDay(),
-      transitionCount: transitionCount || 3
-    });
+    const testHistoricalHours = typeof historicalHours === 'number' ? historicalHours : 8.0;
+    // Get AHP weights
+    const ahpWeights = fuzzyEngine.getCheckoutPredictionAhpWeights();
+
+    // Get prediction from smart engine
+    const prediction = await fuzzyEngine.predictCheckoutTime(
+      {
+        checkinTime: checkinTime,
+        historicalHours: testHistoricalHours,
+        dayOfWeek: dayOfWeek || new Date().getDay(),
+        transitionCount: transitionCount || 3
+      },
+      ahpWeights
+    );
 
     // Calculate predicted checkout time
     const checkinDate = new Date();
     checkinDate.setHours(Math.floor(checkinTime), (checkinTime % 1) * 60, 0, 0);
-    const predictedCheckoutTime = new Date(
-      checkinDate.getTime() + prediction.predictedDuration * 3600000
-    );
+    const predictedCheckoutTime = new Date(checkinDate.getTime() + prediction * 3600000);
 
     res.status(200).json({
       success: true,
@@ -1856,9 +1855,16 @@ export const getSmartCheckoutPrediction = async (req, res, next) => {
           dayOfWeek: dayOfWeek || new Date().getDay(),
           transitionCount: transitionCount || 3
         },
-        prediction: prediction,
+        prediction: {
+          predictedDuration: prediction,
+          method: 'Fuzzy AHP Engine'
+        },
         predicted_checkout_time: predictedCheckoutTime.toISOString(),
-        predicted_duration_hours: prediction.predictedDuration.toFixed(2),
+        predicted_duration_hours: prediction.toFixed(2),
+        methodology: {
+          engine: 'Fuzzy AHP',
+          weights_used: ahpWeights
+        },
         note: 'This is a testing endpoint with provided or default parameters'
       }
     });
@@ -1880,16 +1886,28 @@ export const getSmartEngineConfig = async (req, res, next) => {
         message:
           'Akses ditolak. Hanya admin dan manajemen yang dapat mengakses konfigurasi smart checkout.'
       });
-    }
-
-    const config = await getSmartCheckoutConfig();
-    const weights = await getPredictionWeights();
+    } // Get weights from imported function
+    const weights = fuzzyEngine.getCheckoutPredictionAhpWeights();
 
     res.status(200).json({
       success: true,
       data: {
-        configuration: config,
         ahp_weights: weights,
+        fuzzy_sets: {
+          checkinTime: Object.keys(fuzzyEngine.CHECKOUT_FUZZY_SETS.checkinTime),
+          historicalHours: Object.keys(fuzzyEngine.CHECKOUT_FUZZY_SETS.historicalHours),
+          dayOfWeek: Object.keys(fuzzyEngine.CHECKOUT_FUZZY_SETS.dayOfWeek)
+        },
+        criteria_definitions: {
+          checkin_time: 'Waktu check-in dalam format jam (0-24)',
+          historical_pattern: 'Rata-rata jam kerja historis pengguna',
+          day_context: 'Konteks hari dalam seminggu (0=Minggu, 6=Sabtu)',
+          transition_factor: 'Frekuensi perpindahan lokasi/mobilitas'
+        },
+        methodology: 'Fuzzy Inference System dengan AHP weighting',
+        engine_version: '2.0 - Unified Fuzzy AHP Engine',
+        consistency_ratio: weights.consistency_ratio,
+        is_consistent: weights.consistency_ratio <= 0.1,
         description:
           'Smart Checkout menggunakan Fuzzy AHP untuk prediksi waktu pulang yang realistis'
       }
@@ -1966,26 +1984,22 @@ export const getEnhancedAutoCheckoutSettings = async (req, res, next) => {
             return sum + hours;
           }, 0);
           historicalHours = totalHours / userAttendances.length;
-        }
-
-        const prediction = await predictWorkDuration({
+        } // Get smart prediction using imported function
+        const predictedDuration = await fuzzyEngine.predictCheckoutTime({
           checkinTime: checkinHours,
           historicalHours: historicalHours,
           dayOfWeek: new Date().getDay(),
           transitionCount: 3
         });
 
-        const predictedCheckoutTime = new Date(
-          timeIn.getTime() + prediction.predictedDuration * 3600000
-        );
-
+        const predictedCheckoutTime = new Date(timeIn.getTime() + predictedDuration * 3600000);
         smartPredictions.push({
           attendance_id: attendance.id_attendance,
           user_id: attendance.user_id,
           user_name: attendance.user?.full_name,
           time_in: formatTimeOnly(attendance.time_in),
           predicted_checkout: formatTimeOnly(predictedCheckoutTime),
-          predicted_duration: prediction.predictedDuration.toFixed(2),
+          predicted_duration: predictedDuration.toFixed(2),
           historical_avg: historicalHours.toFixed(2)
         });
       } catch (error) {

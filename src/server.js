@@ -5,17 +5,14 @@ import logger from './utils/logger.js';
 import { startCreateGeneralAlphaJob } from './jobs/createGeneralAlpha.job.js';
 import { startResolveWfaBookingsJob } from './jobs/resolveWfaBookings.job.js';
 import { startAutoCheckoutJob } from './jobs/autoCheckout.job.js';
-import { initializeSmartCheckoutEngine } from './utils/smartCheckoutEngine.js';
 
 (async () => {
   try {
     await sequelize.authenticate();
     logger.info('Database connected successfully');
 
-    // Initialize Smart Checkout Engine with Fuzzy AHP
-    logger.info('Initializing Smart Checkout Engine...');
-    initializeSmartCheckoutEngine();
-    logger.info('Smart Checkout Engine initialized successfully');
+    // All smart features are now centralized in fuzzyAhpEngine.js
+    logger.info('Fuzzy AHP Engine ready for intelligent features');
 
     // Initialize all automated jobs
     startCreateGeneralAlphaJob();

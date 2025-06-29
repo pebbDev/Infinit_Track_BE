@@ -2,7 +2,30 @@ import axios from 'axios';
 
 import Settings from '../models/settings.model.js';
 import logger from '../utils/logger.js';
-import { initializeEngine, scorePlaces, getAHPConfig } from '../utils/wfaRecommendationEngine.js';
+import fuzzyEngine from '../utils/fuzzyAhpEngine.js';
+
+/**
+ * Calculate distance between two coordinates using Haversine formula
+ * @param {number} lat1 - Latitude of first point
+ * @param {number} lon1 - Longitude of first point
+ * @param {number} lat2 - Latitude of second point
+ * @param {number} lon2 - Longitude of second point
+ * @returns {number} Distance in meters
+ */
+function calculateDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371e3; // Earth's radius in meters
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+
+  const a =
+    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c;
+}
 
 /**
  * Get WFA recommendations based on user location
@@ -72,17 +95,16 @@ export const getWfaRecommendations = async (req, res, next) => {
         code: 'E_CONFIG',
         message: 'API key Geoapify tidak ditemukan'
       });
-    }
+    } // Definisikan kategori yang dicari - menggunakan kategori yang terbukti berhasil di Indonesia
+    const categories = 'catering,accommodation,office,education';
 
-    // Definisikan kategori yang dicari
-    const categories = 'office.coworking,education.library,catering.cafe,accommodation.hotel';
-
-    // Parameter untuk API Geoapify
+    // Parameter untuk API Geoapify - simplified untuk Indonesia
     const geoapifyParams = {
       categories,
       filter: `circle:${longitude},${latitude},${searchRadius}`,
-      limit: 20,
-      apiKey: geoapifyApiKey
+      limit: 50,
+      apiKey: geoapifyApiKey,
+      lang: 'en'
     };
     logger.info(`Calling Geoapify API with params: ${JSON.stringify(geoapifyParams)}`);
 
@@ -107,34 +129,90 @@ export const getWfaRecommendations = async (req, res, next) => {
         throw error;
       }
     };
-
     const geoapifyResponse = await makeGeoapifyRequest();
     const candidates = geoapifyResponse.data.features || [];
 
-    logger.info(`Geoapify returned ${candidates.length} candidates`);
+    logger.info(`Geoapify returned ${candidates.length} candidates`); // Langkah C: Gunakan Fuzzy AHP Engine untuk scoring
+    // Dapatkan bobot AHP untuk kriteria WFA
+    const ahpWeights = fuzzyEngine.getWfaAhpWeights();
 
-    // Langkah C: Gunakan unified Fuzzy AHP engine untuk scoring
-    // Initialize engine jika belum diinisialisasi
-    try {
-      initializeEngine();
-    } catch (error) {
-      logger.warn('Engine sudah diinisialisasi:', error.message);
+    logger.info('Using Fuzzy AHP Engine with weights:', ahpWeights); // Score setiap kandidat menggunakan mesin terpusat
+    const scoredRecommendations = [];
+    const processedPlaces = new Set(); // Track places dengan multiple identifiers
+    const duplicateWarnings = new Set(); // Track warning messages untuk mencegah spam
+
+    for (const place of candidates) {
+      try {
+        // Create robust place identifier using multiple properties
+        const placeName = (place.properties?.name || 'unknown').trim();
+        const coordinates = place.geometry?.coordinates || [0, 0];
+
+        // Normalize name untuk matching yang lebih baik
+        const normalizedName = placeName
+          .toLowerCase()
+          .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+          .replace(/[^\w\s]/g, '') // Remove special characters except spaces
+          .trim();
+
+        // Create composite key: normalized_name + rounded_coordinates
+        const coordKey = `${Math.round(coordinates[1] * 10000)},${Math.round(coordinates[0] * 10000)}`;
+        const placeKey = `${normalizedName}|${coordKey}`;
+
+        // Check for duplicates
+        if (processedPlaces.has(placeKey)) {
+          // Only warn once per unique place name to avoid spam
+          const warningKey = normalizedName;
+          if (!duplicateWarnings.has(warningKey)) {
+            logger.warn(`Skipping duplicate place: ${placeName}`);
+            duplicateWarnings.add(warningKey);
+          }
+          continue; // Skip duplikasi
+        }
+
+        processedPlaces.add(placeKey);
+        // Add user location for distance calculation
+        place.userLocation = { lat: latitude, lon: longitude };
+        const scoreResult = await fuzzyEngine.calculateWfaScore(place, ahpWeights);
+
+        // Add additional metadata for response
+        const scoredPlace = {
+          ...place,
+          scoring_details: {
+            final_score: scoreResult.score,
+            label: scoreResult.label,
+            breakdown: scoreResult.breakdown,
+            distance_meters:
+              place.properties?.distance ||
+              calculateDistance(
+                latitude,
+                longitude,
+                place.geometry.coordinates[1],
+                place.geometry.coordinates[0]
+              )
+          }
+        };
+
+        scoredRecommendations.push(scoredPlace);
+      } catch (error) {
+        logger.warn(`Failed to score place ${place.properties?.name || 'unknown'}:`, error.message);
+        // Include place with default score if scoring fails
+        scoredRecommendations.push({
+          ...place,
+          scoring_details: {
+            final_score: 50,
+            label: 'Cukup Direkomendasikan',
+            breakdown: { error: error.message },
+            distance_meters: place.properties?.distance || 1000
+          }
+        });
+      }
     }
+    logger.info(`Scored ${scoredRecommendations.length} places using Fuzzy AHP Engine`);
 
-    // Gunakan unified scoring engine
-    const scoringResult = scorePlaces(candidates, latitude, longitude);
-    const scoredRecommendations = scoringResult.scored_places;
-
-    logger.info('Using Unified Fuzzy AHP approach:', {
-      criteria_weights: scoringResult.methodology.criteria_weights,
-      consistency_ratio: scoringResult.methodology.consistency_ratio,
-      approach: scoringResult.methodology.approach,
-      total_candidates: candidates.length,
-      scored_candidates: scoredRecommendations.length
-    });
-
-    // Langkah D: Urutkan dan Kirim Respons
-    const sortedRecommendations = scoredRecommendations.slice(0, 10); // Ambil 10 teratas
+    // Langkah D: Urutkan berdasarkan skor dan Kirim Respons
+    const sortedRecommendations = scoredRecommendations
+      .sort((a, b) => b.scoring_details.final_score - a.scoring_details.final_score)
+      .slice(0, 30); // Ambil 30 teratas (increased from 10)
 
     logger.info(`Returning ${sortedRecommendations.length} recommendations`);
 
@@ -147,25 +225,86 @@ export const getWfaRecommendations = async (req, res, next) => {
             place.properties.formatted || place.properties.address_line2 || 'Alamat tidak tersedia',
           latitude: place.geometry.coordinates[1],
           longitude: place.geometry.coordinates[0],
-          suitability_score: place.scoring_details.final_score, // Already in 0-100 format from balanced scoring
-          suitability_label:
-            place.scoring_details.final_score >= 80
-              ? 'Sangat Direkomendasikan'
-              : place.scoring_details.final_score >= 60
-                ? 'Baik'
-                : place.scoring_details.final_score >= 40
-                  ? 'Cukup'
-                  : place.scoring_details.final_score >= 20
-                    ? 'Kurang Sesuai'
-                    : 'Tidak Direkomendasikan',
-          category: place.scoring_details.evaluations.type,
-          distance_from_center: place.scoring_details.distance_meters, // Already in meters
+          suitability_score: place.scoring_details.final_score,
+          suitability_label: place.scoring_details.label,
+          category: fuzzyEngine.getCategoryDisplayName(fuzzyEngine.categorizePlace(place)),
+          place_type: fuzzyEngine.categorizePlace(place),
+          distance_from_center: place.scoring_details.distance_meters,
+          // ✅ ENHANCED MISSING DATA HANDLING
+          real_data_analysis: {
+            // Data quality assessment
+            data_reliability:
+              place.scoring_details.breakdown.data_quality?.reliability_rating || 'UNKNOWN',
+            confidence_score: place.scoring_details.breakdown.data_quality?.confidence_score || 0,
+            data_completeness_percentage:
+              place.scoring_details.breakdown.data_quality?.data_completeness_percentage || 0,
+
+            // Missing data information
+            missing_data: place.scoring_details.breakdown.data_quality?.missing_data || [],
+            critical_missing: place.scoring_details.breakdown.data_quality?.critical_missing || [],
+            enhancement_suggestions:
+              place.scoring_details.breakdown.data_quality?.enhancement_suggestions || [],
+
+            // Workspace suitability
+            workspace_score:
+              place.scoring_details.breakdown.workspace_analysis?.work_environment_score || 0,
+            power_outlets:
+              place.scoring_details.breakdown.workspace_analysis?.power_availability || 0,
+            seating_quality:
+              place.scoring_details.breakdown.workspace_analysis?.seating_quality || 0,
+            noise_level:
+              place.scoring_details.breakdown.workspace_analysis?.noise_level_estimate || 0,
+            workspace_factors:
+              place.scoring_details.breakdown.workspace_analysis?.suitability_factors || [],
+
+            // Internet connectivity information with enhanced fallback details
+            internet_info: {
+              score: place.scoring_details.breakdown.internet_score || 0,
+              confidence: place.scoring_details.breakdown.internet_result?.confidence || 0,
+              source: place.scoring_details.breakdown.internet_result?.source || 'UNKNOWN',
+              reasoning:
+                place.scoring_details.breakdown.internet_result?.reasoning ||
+                'No information available'
+            },
+
+            // Real amenities dari API
+            confirmed_amenities: {
+              wifi: place.properties?.amenities?.wifi || false,
+              internet_access: place.properties?.amenities?.internet_access || null,
+              power_outlets: place.properties?.amenities?.power_outlets || false,
+              tables: place.properties?.amenities?.tables || false,
+              seating: place.properties?.amenities?.seating || false,
+              quiet: place.properties?.amenities?.quiet || false,
+              air_conditioning: place.properties?.amenities?.air_conditioning || false,
+              business_center: place.properties?.amenities?.business_center || false,
+              conference_room: place.properties?.amenities?.conference_room || false
+            },
+
+            // Contact and verification data
+            contact_available: {
+              phone: !!place.properties?.contact?.phone,
+              website: !!place.properties?.contact?.website,
+              email: !!place.properties?.contact?.email
+            },
+
+            // Rating dan review data
+            rating: place.properties?.rating || 0,
+            total_reviews: place.properties?.reviews_count || 0,
+
+            // Data source confidence
+            data_sources: place.scoring_details.breakdown.data_quality?.data_sources || []
+          },
+
           // Detail scoring untuk debugging
           score_details: {
             final_score: place.scoring_details.final_score,
-            component_scores: place.scoring_details.component_scores,
-            evaluations: place.scoring_details.evaluations,
-            weights_used: place.scoring_details.weights_used
+            component_scores: place.scoring_details.breakdown,
+            weights_used: ahpWeights,
+            confidence_adjustment_applied:
+              place.scoring_details.breakdown.confidence_adjusted_score !==
+              place.scoring_details.breakdown.raw_score,
+            availability_penalty_applied:
+              place.scoring_details.breakdown.availability_penalty_applied || false
           }
         })),
         search_criteria: {
@@ -176,9 +315,13 @@ export const getWfaRecommendations = async (req, res, next) => {
           total_candidates_found: candidates.length,
           recommendations_returned: sortedRecommendations.length
         },
-        fuzzy_ahp_methodology: scoringResult.methodology
+        fuzzy_ahp_methodology: {
+          approach: 'Unified Fuzzy AHP Engine',
+          criteria_weights: ahpWeights,
+          engine_version: '2.0'
+        }
       },
-      message: 'Rekomendasi WFA berhasil diambil menggunakan Unified Fuzzy AHP Engine'
+      message: 'Rekomendasi WFA berhasil diambil menggunakan Fuzzy AHP Engine'
     });
   } catch (error) {
     logger.error(`WFA recommendations error: ${error.message}`, { stack: error.stack });
@@ -236,32 +379,30 @@ export const getWfaRecommendations = async (req, res, next) => {
  */
 export const getWfaAhpConfig = async (req, res, next) => {
   try {
-    // Initialize engine jika belum diinisialisasi
-    try {
-      initializeEngine();
-    } catch (error) {
-      logger.warn('Engine sudah diinisialisasi:', error.message);
-    }
-
-    const ahpConfig = getAHPConfig();
-
+    // Dapatkan konfigurasi AHP dari mesin terpusat
+    const ahpWeights = fuzzyEngine.getWfaAhpWeights();
     res.status(200).json({
       success: true,
       data: {
-        current_weights: ahpConfig.criteria_weights,
-        consistency_ratio: ahpConfig.consistency_ratio,
-        is_consistent: ahpConfig.consistency_ratio <= 0.1,
-        method: 'Unified Fuzzy AHP Engine',
-        criteria_explanation: ahpConfig.criteria_definitions,
-        alternative_weights: ahpConfig.alternative_weights,
-        comparison_matrix: ahpConfig.comparison_matrix,
-        weight_ranges: {
-          type: 'Ditentukan oleh AHP berdasarkan expert judgment',
-          internet: 'Ditentukan oleh AHP berdasarkan expert judgment',
-          distance: 'Ditentukan oleh AHP berdasarkan expert judgment'
-        }
+        current_weights: {
+          location_type: ahpWeights.location_type,
+          amenity_score: ahpWeights.amenity_score,
+          distance_factor: ahpWeights.distance_factor
+        },
+        consistency_ratio: ahpWeights.consistency_ratio,
+        is_consistent: ahpWeights.consistency_ratio <= 0.1,
+        method: 'Fuzzy AHP Engine v3.0 - Comprehensive Amenity Assessment',
+        criteria_explanation: {
+          location_type:
+            'Penilaian berdasarkan kategori tempat (cafe, hotel, coworking space, dll)',
+          amenity_score:
+            'Penilaian komprehensif fasilitas: WiFi, informasi bisnis, brand recognition, payment options, aksesibilitas, dan keragaman kategori',
+          distance_factor: 'Penilaian berdasarkan jarak dari pusat pencarian'
+        },
+        weight_calculation: 'Menggunakan AHP library dengan expert judgment matrix',
+        scoring_method: 'Weighted scoring model dengan normalisasi 0-100'
       },
-      message: 'Konfigurasi Unified Fuzzy AHP berhasil diambil'
+      message: 'Konfigurasi Fuzzy AHP Engine berhasil diambil'
     });
   } catch (error) {
     logger.error(`Error getting AHP config: ${error.message}`);
@@ -270,47 +411,180 @@ export const getWfaAhpConfig = async (req, res, next) => {
 };
 
 /**
- * Test Fuzzy AHP with different comparison values
- * Admin endpoint untuk testing dan tuning algoritma
+ * Test Fuzzy AHP with different scenarios
+ * Admin endpoint untuk testing dan debugging algoritma
  */
 export const testFuzzyAhp = async (req, res, next) => {
   try {
-    const { type_vs_internet = 3, type_vs_distance = 5, internet_vs_distance = 3 } = req.body;
+    const { place_data, custom_weights } = req.body;
 
-    // Import class untuk testing
-    const { FuzzyAHP } = await import('../utils/fuzzyAHP.js');
+    // Validasi input
+    if (!place_data) {
+      return res.status(400).json({
+        success: false,
+        message: 'Parameter place_data wajib diisi untuk testing'
+      });
+    } // Gunakan custom weights jika disediakan, atau default weights
+    const weights = custom_weights || fuzzyEngine.getWfaAhpWeights();
 
-    const criteria = ['type', 'internet', 'distance'];
-    const testAHP = new FuzzyAHP(criteria);
-
-    // Set comparison values
-    testAHP.setComparison('type', 'internet', type_vs_internet);
-    testAHP.setComparison('type', 'distance', type_vs_distance);
-    testAHP.setComparison('internet', 'distance', internet_vs_distance);
-
-    const weights = testAHP.calculateWeights();
-    const cr = testAHP.calculateConsistencyRatio();
+    // Test scoring dengan data yang disediakan
+    const testResult = await fuzzyEngine.calculateWfaScore(place_data, weights);
 
     res.status(200).json({
       success: true,
       data: {
-        input_comparisons: {
-          type_vs_internet,
-          type_vs_distance,
-          internet_vs_distance
+        test_input: {
+          place_data: place_data,
+          weights_used: weights
         },
-        calculated_weights: weights,
-        consistency_ratio: cr,
-        is_consistent: cr <= 0.1,
-        recommendation:
-          cr <= 0.1
-            ? 'Matriks perbandingan konsisten, dapat digunakan'
-            : 'Matriks perbandingan tidak konsisten, pertimbangkan untuk merevisi nilai perbandingan'
+        test_result: testResult,
+        interpretation: {
+          score_range: '0-100',
+          score_meaning:
+            testResult.score >= 70
+              ? 'Recommended'
+              : testResult.score >= 50
+                ? 'Acceptable'
+                : 'Not recommended',
+          consistency_check: weights.consistency_ratio <= 0.1 ? 'Consistent' : 'Inconsistent'
+        }
       },
       message: 'Test Fuzzy AHP berhasil'
     });
   } catch (error) {
     logger.error(`Error testing Fuzzy AHP: ${error.message}`);
+    next(error);
+  }
+};
+
+/**
+ * Debug endpoint untuk testing API Geoapify langsung
+ * Admin endpoint untuk diagnosa masalah API coverage
+ */
+export const debugGeoapifyApi = async (req, res, next) => {
+  try {
+    const { lat, lng, radius = 10000 } = req.query;
+
+    if (!lat || !lng) {
+      return res.status(400).json({
+        success: false,
+        message: 'Parameter lat dan lng wajib diisi untuk debug'
+      });
+    }
+
+    const latitude = parseFloat(lat);
+    const longitude = parseFloat(lng);
+    const searchRadius = parseInt(radius);
+
+    const geoapifyApiKey = process.env.GEOAPIFY_API_KEY;
+    if (!geoapifyApiKey) {
+      return res.status(500).json({
+        success: false,
+        message: 'GEOAPIFY_API_KEY tidak ditemukan'
+      });
+    }
+
+    // Test dengan berbagai kombinasi parameter
+    const testCases = [
+      {
+        name: 'Test 1: Basic Categories',
+        params: {
+          categories: 'catering,accommodation,office,education',
+          filter: `circle:${longitude},${latitude},${searchRadius}`,
+          limit: 50,
+          apiKey: geoapifyApiKey
+        }
+      },
+      {
+        name: 'Test 2: All Building Types',
+        params: {
+          categories: 'building',
+          filter: `circle:${longitude},${latitude},${searchRadius}`,
+          limit: 50,
+          apiKey: geoapifyApiKey
+        }
+      },
+      {
+        name: 'Test 3: No Category Filter',
+        params: {
+          filter: `circle:${longitude},${latitude},${searchRadius}`,
+          limit: 50,
+          apiKey: geoapifyApiKey
+        }
+      }
+    ];
+
+    const results = [];
+
+    for (const testCase of testCases) {
+      try {
+        logger.info(`Running ${testCase.name} with params:`, testCase.params);
+
+        const response = await axios.get('https://api.geoapify.com/v2/places', {
+          params: testCase.params,
+          timeout: 30000,
+          headers: {
+            'User-Agent': 'Infinit-Track-WFA-Debug/1.0',
+            Accept: 'application/json'
+          }
+        });
+
+        const features = response.data.features || [];
+
+        results.push({
+          test_name: testCase.name,
+          params_used: testCase.params,
+          results_count: features.length,
+          sample_places: features.slice(0, 3).map((place) => ({
+            name: place.properties?.name || 'Unnamed',
+            categories: place.properties?.categories || [],
+            address: place.properties?.formatted || 'No address',
+            distance: calculateDistance(
+              latitude,
+              longitude,
+              place.geometry.coordinates[1],
+              place.geometry.coordinates[0]
+            )
+          })),
+          status: 'SUCCESS'
+        });
+      } catch (error) {
+        results.push({
+          test_name: testCase.name,
+          params_used: testCase.params,
+          error: error.message,
+          status: 'FAILED',
+          response_status: error.response?.status || 'NO_RESPONSE'
+        });
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        location_tested: {
+          latitude,
+          longitude,
+          radius: searchRadius
+        },
+        api_key_status: geoapifyApiKey ? 'AVAILABLE' : 'MISSING',
+        test_results: results,
+        summary: {
+          total_tests: testCases.length,
+          successful_tests: results.filter((r) => r.status === 'SUCCESS').length,
+          failed_tests: results.filter((r) => r.status === 'FAILED').length,
+          total_places_found: results.reduce((sum, r) => sum + (r.results_count || 0), 0)
+        },
+        recommendations: [
+          'Jika semua test gagal, cek API key Geoapify',
+          'Jika Test 3 (no category) berhasil, masalah di kategori filter',
+          'Jika tidak ada data sama sekali, kemungkinan coverage Geoapify terbatas di area tersebut'
+        ]
+      },
+      message: 'Debug Geoapify API completed'
+    });
+  } catch (error) {
+    logger.error(`Debug Geoapify API error: ${error.message}`);
     next(error);
   }
 };
