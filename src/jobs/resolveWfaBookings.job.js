@@ -1,16 +1,17 @@
 import cron from 'node-cron';
+import { Op } from 'sequelize';
 
 import { Booking, Attendance } from '../models/index.js';
 import logger from '../utils/logger.js';
 
 /**
- * Resolve unused WFA bookings by creating alpha attendance records
- * This function checks all approved WFA bookings for today and creates
- * alpha attendance records for those without any attendance record
+ * Resolve unused WFA bookings and expired pending bookings
+ * Task A: Create alpha records for unused approved WFA bookings
+ * Task B: Reject expired pending bookings
  */
-export const resolveUnusedWfaBookings = async () => {
+export const resolveWfaBookingsJob = async () => {
   try {
-    logger.info('Starting resolve unused WFA bookings job...');
+    logger.info('Starting resolve WFA bookings job...');
 
     // Get current Jakarta time for today's date
     const now = new Date();
@@ -18,7 +19,26 @@ export const resolveUnusedWfaBookings = async () => {
     const jakartaTime = new Date(now.getTime() + jakartaOffset * 60000);
     const todayDate = jakartaTime.toISOString().split('T')[0]; // YYYY-MM-DD format
 
-    logger.info(`Checking unused WFA bookings for date: ${todayDate}`);
+    logger.info(`Processing WFA bookings for date: ${todayDate}`);
+
+    // TASK A: Handle unused approved WFA bookings for today
+    await handleUnusedApprovedBookings(todayDate, jakartaTime);
+
+    // TASK B: Handle expired pending bookings
+    await handleExpiredPendingBookings(todayDate, jakartaTime);
+
+    logger.info('Resolve WFA bookings job completed successfully');
+  } catch (error) {
+    logger.error('Error in resolve WFA bookings job:', error);
+  }
+};
+
+/**
+ * Task A: Create alpha records for approved WFA bookings that weren't used
+ */
+const handleUnusedApprovedBookings = async (todayDate, jakartaTime) => {
+  try {
+    logger.info('Task A: Processing unused approved WFA bookings...');
 
     // Find all approved WFA bookings for today
     const approvedBookings = await Booking.findAll({
@@ -36,15 +56,16 @@ export const resolveUnusedWfaBookings = async () => {
     // Process each approved booking
     for (const booking of approvedBookings) {
       try {
-        // Check if attendance record already exists for this booking
+        // Check if user has ANY attendance record for today (not just for this booking)
         const existingAttendance = await Attendance.findOne({
           where: {
-            booking_id: booking.booking_id
+            user_id: booking.user_id,
+            attendance_date: todayDate
           }
         });
 
         if (!existingAttendance) {
-          // No attendance record found, create alpha record
+          // No attendance record found for this user today, create alpha record
           await Attendance.create({
             user_id: booking.user_id,
             category_id: 3, // Work From Anywhere
@@ -55,20 +76,20 @@ export const resolveUnusedWfaBookings = async () => {
             time_out: null,
             work_hour: 0,
             attendance_date: booking.schedule_date,
-            notes: 'Absensi alpha otomatis - booking WFA disetujui tetapi tidak digunakan',
+            notes: `Booking WFA (ID: ${booking.booking_id}) disetujui tetapi tidak digunakan.`,
             created_at: jakartaTime,
             updated_at: jakartaTime
           });
 
           alphaRecordsCreated++;
           logger.info(
-            `Created alpha attendance record for booking ID: ${booking.booking_id}, user ID: ${booking.user_id}`
+            `Created alpha attendance record for unused booking ID: ${booking.booking_id}, user ID: ${booking.user_id}`
           );
         } else {
           // Attendance record already exists, skip
           skippedBookings++;
           logger.debug(
-            `Skipping booking ID: ${booking.booking_id} - attendance record already exists`
+            `Skipping booking ID: ${booking.booking_id} - user already has attendance record`
           );
         }
       } catch (error) {
@@ -77,22 +98,72 @@ export const resolveUnusedWfaBookings = async () => {
     }
 
     logger.info(
-      `Resolve unused WFA bookings job completed. Alpha records created: ${alphaRecordsCreated}, Skipped: ${skippedBookings}`
+      `Task A completed. Alpha records created: ${alphaRecordsCreated}, Skipped: ${skippedBookings}`
     );
   } catch (error) {
-    logger.error('Error in resolve unused WFA bookings job:', error);
+    logger.error('Error in Task A (unused approved bookings):', error);
   }
 };
 
 /**
- * Start the cron job for resolving unused WFA bookings
+ * Task B: Reject expired pending bookings
+ */
+const handleExpiredPendingBookings = async (todayDate, jakartaTime) => {
+  try {
+    logger.info('Task B: Processing expired pending bookings...');
+
+    // Find all pending bookings with schedule_date < today
+    const expiredBookings = await Booking.findAll({
+      where: {
+        schedule_date: {
+          [Op.lt]: todayDate
+        },
+        status: 3 // pending status
+      }
+    });
+
+    logger.info(`Found ${expiredBookings.length} expired pending bookings`);
+
+    let rejectedBookings = 0;
+    let errorCount = 0;
+
+    // Process each expired booking
+    for (const booking of expiredBookings) {
+      try {
+        await booking.update({
+          status: 2, // rejected
+          processed_at: jakartaTime,
+          approved_by: null, // System rejection, no specific admin
+          updated_at: jakartaTime
+        });
+
+        rejectedBookings++;
+        logger.info(
+          `Rejected expired booking ID: ${booking.booking_id}, schedule_date: ${booking.schedule_date}`
+        );
+      } catch (error) {
+        errorCount++;
+        logger.error(`Error rejecting booking ID: ${booking.booking_id} - ${error.message}`);
+      }
+    }
+
+    logger.info(
+      `Task B completed. Expired bookings rejected: ${rejectedBookings}, Errors: ${errorCount}`
+    );
+  } catch (error) {
+    logger.error('Error in Task B (expired pending bookings):', error);
+  }
+};
+
+/**
+ * Start the cron job for resolving WFA bookings
  * Runs daily at 23:50 Jakarta time
  */
 export const startResolveWfaBookingsJob = () => {
   logger.info('Resolve WFA Bookings job scheduled to run daily at 23:50');
 
   // Schedule cron job to run daily at 23:50 Jakarta time
-  cron.schedule('50 23 * * *', resolveUnusedWfaBookings, {
+  cron.schedule('50 23 * * *', resolveWfaBookingsJob, {
     scheduled: true,
     timezone: 'Asia/Jakarta'
   });
@@ -105,11 +176,11 @@ export const startResolveWfaBookingsJob = () => {
  * This function can be called manually to test the resolve logic
  */
 export const triggerResolveWfaBookings = async () => {
-  logger.info('Manual trigger: Resolve unused WFA bookings job');
-  await resolveUnusedWfaBookings();
+  logger.info('Manual trigger: Resolve WFA bookings job');
+  await resolveWfaBookingsJob();
   return {
     success: true,
-    message: 'Resolve unused WFA bookings job executed manually',
+    message: 'Resolve WFA bookings job executed manually',
     timestamp: new Date().toISOString()
   };
 };
