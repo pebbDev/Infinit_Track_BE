@@ -310,11 +310,14 @@ export const checkIn = async (req, res, next) => {
   try {
     // 1. Get Input Data
     const userId = req.user.id;
-    const { category_id, latitude, longitude, notes = '', booking_id } = req.body; // Definisikan "Hari Ini" dengan timezone Asia/Jakarta
-    const today = new Date();
-    const jakartaOffset = 7 * 60; // UTC+7 dalam menit
-    const localTime = new Date(today.getTime() + jakartaOffset * 60000);
-    const todayDate = localTime.toISOString().split('T')[0]; // YYYY-MM-DD format
+    const { category_id, latitude, longitude, notes = '', booking_id } = req.body;
+
+    // Definisikan "Hari Ini" dengan timezone Asia/Jakarta yang benar
+    const now = new Date();
+    // Gunakan toLocaleString untuk mendapatkan waktu Jakarta yang akurat
+    const jakartaTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
+    const localTime = jakartaTime; // Waktu sekarang dalam timezone Jakarta
+    const todayDate = jakartaTime.toISOString().split('T')[0]; // YYYY-MM-DD format
 
     // 1. First Layer Validation - Check Duplication
     const existingAttendance = await Attendance.findOne({
@@ -377,10 +380,9 @@ export const checkIn = async (req, res, next) => {
         });
       }
     } // 4. Validasi Jam Kerja
-    // Calculate time using proper Jakarta timezone - parse from ISO string
-    const jakartaTimeISO = localTime.toISOString();
-    const currentHour = parseInt(jakartaTimeISO.substring(11, 13));
-    const currentMinute = parseInt(jakartaTimeISO.substring(14, 16));
+    // Calculate time using proper Jakarta timezone directly from Date object
+    const currentHour = jakartaTime.getHours();
+    const currentMinute = jakartaTime.getMinutes();
     const currentTimeMinutes = currentHour * 60 + currentMinute;
 
     const checkinStartMinutes =
@@ -615,15 +617,14 @@ export const checkIn = async (req, res, next) => {
 // Debug endpoint untuk troubleshooting check-in time validation
 export const debugCheckInTime = async (req, res) => {
   try {
-    // Get current Jakarta time
+    // Get current Jakarta time with proper timezone handling
     const today = new Date();
-    const jakartaOffset = 7 * 60; // UTC+7 dalam menit
-    const localTime = new Date(today.getTime() + jakartaOffset * 60000);
+    const localTime = new Date(today.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
     const todayDate = localTime.toISOString().split('T')[0];
 
     // Simple test first
-    const testHour = parseInt(localTime.toISOString().substring(11, 13));
-    const testMinute = parseInt(localTime.toISOString().substring(14, 16));
+    const testHour = localTime.getHours();
+    const testMinute = localTime.getMinutes();
 
     console.log('=== DEBUG TIMEZONE TEST ===');
     console.log('Raw UTC time:', today.toISOString());
@@ -661,16 +662,14 @@ export const debugCheckInTime = async (req, res) => {
     const lateTime = settingsMap['checkin.late_time'] || '10:00:00';
 
     // Calculate time in minutes using proper Jakarta timezone
-    // Parse the hours and minutes from the ISO string of adjusted time
-    const jakartaTimeISO = localTime.toISOString();
-    const currentHour = parseInt(jakartaTimeISO.substring(11, 13));
-    const currentMinute = parseInt(jakartaTimeISO.substring(14, 16));
+    const currentHour = localTime.getHours();
+    const currentMinute = localTime.getMinutes();
     const currentTimeMinutes = currentHour * 60 + currentMinute;
 
     console.log('DEBUG TIMEZONE:');
     console.log('today (UTC):', today.toISOString());
     console.log('localTime (Jakarta):', localTime.toISOString());
-    console.log('jakartaTimeISO:', jakartaTimeISO);
+    console.log('localTime string:', localTime.toString());
     console.log('extracted hour:', currentHour);
     console.log('extracted minute:', currentMinute);
 
@@ -721,10 +720,9 @@ export const getAttendanceStatus = async (req, res, next) => {
   try {
     const userId = req.user.id;
 
-    // Definisikan "Hari Ini" dengan timezone Asia/Jakarta
-    const today = new Date();
-    const jakartaOffset = 7 * 60; // UTC+7 dalam menit
-    const localTime = new Date(today.getTime() + jakartaOffset * 60000);
+    // Definisikan "Hari Ini" dengan timezone Asia/Jakarta yang benar
+    const now = new Date();
+    const localTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
     const todayDate = localTime.toISOString().split('T')[0]; // YYYY-MM-DD format    // Ambil pengaturan dari database
     const settings = await Settings.findAll({
       where: {
@@ -847,10 +845,9 @@ export const getAttendanceStatus = async (req, res, next) => {
         };
       }
     } // Tentukan waktu check-in yang diizinkan (08:00 - 18:00)
-    // Calculate time using proper Jakarta timezone - parse from ISO string
-    const jakartaTimeISO = localTime.toISOString();
-    const currentHour = parseInt(jakartaTimeISO.substring(11, 13));
-    const currentMinute = parseInt(jakartaTimeISO.substring(14, 16));
+    // Calculate time using proper Jakarta timezone directly from Date object
+    const currentHour = localTime.getHours();
+    const currentMinute = localTime.getMinutes();
     const currentTimeMinutes = currentHour * 60 + currentMinute;
 
     const checkinStartMinutes =
@@ -1017,7 +1014,8 @@ export const checkOut = async (req, res, next) => {
       });
     } // 4. Update Database
     const now = new Date();
-    const timeOut = new Date(now.getTime() + jakartaOffset * 60000);
+    // Gunakan timezone Jakarta yang benar
+    const timeOut = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
     const timeIn = new Date(attendance.time_in);
 
     // Hitung work_hour menggunakan utility function

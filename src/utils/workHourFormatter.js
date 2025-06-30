@@ -70,9 +70,9 @@ export const calculateWorkHour = (timeIn, timeOut) => {
 };
 
 /**
- * Format datetime to "HH:MM" format
+ * Format datetime to "HH:MM" format in Jakarta timezone
  * @param {Date|string} dateTime - Date object or datetime string
- * @returns {string} Formatted time as "HH:MM" (e.g., "08:30")
+ * @returns {string} Formatted time as "HH:MM" (e.g., "08:30") in Jakarta timezone
  */
 export const formatTimeOnly = (dateTime) => {
   if (!dateTime) {
@@ -86,9 +86,23 @@ export const formatTimeOnly = (dateTime) => {
     return '00:00';
   }
 
+  // Convert to Jakarta timezone using toLocaleString
+  const jakartaTime = date.toLocaleString('en-US', {
+    timeZone: 'Asia/Jakarta',
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
+  // Extract HH:MM from the formatted string
+  const timeParts = jakartaTime.match(/(\d{2}):(\d{2})/);
+  if (timeParts) {
+    return `${timeParts[1]}:${timeParts[2]}`;
+  }
+
+  // Fallback to old method if regex fails
   const hours = date.getHours();
   const minutes = date.getMinutes();
-
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 };
 
