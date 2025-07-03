@@ -1,15 +1,96 @@
 import { Op } from 'sequelize';
 import { parse, startOfTomorrow, isBefore, startOfDay } from 'date-fns';
+import axios from 'axios';
 
 import sequelize from '../config/database.js';
 import { Booking, Location, BookingStatus, User, Position, Role } from '../models/index.js';
+import fuzzyEngine from '../utils/fuzzyAhpEngine.js';
+import logger from '../utils/logger.js';
+
+/**
+ * Fetches place details from Geoapify and calculates its suitability score.
+ * If no data is found, returns a default score.
+ * @param {number} latitude - The latitude of the location.
+ * @param {number} longitude - The longitude of the location.
+ * @returns {Promise<{suitability_score: number, suitability_label: string}>}
+ */
+async function getSuitabilityScoreForCustomLocation(latitude, longitude) {
+  try {
+    const geoapifyApiKey = process.env.GEOAPIFY_API_KEY;
+    if (!geoapifyApiKey) {
+      logger.error('GEOAPIFY_API_KEY not found for booking suitability scoring.');
+      return {
+        suitability_score: 50,
+        suitability_label: 'Lokasi tidak terdaftar'
+      };
+    }
+
+    // Panggil Geoapify Places API untuk mencari tempat terdekat dari koordinat
+    const apiUrl = 'https://api.geoapify.com/v2/places';
+    const params = {
+      categories: 'catering,accommodation,office,education,commercial,leisure', // Kategori luas
+      filter: `circle:${longitude},${latitude},50`, // Radius 50 meter
+      limit: 1, // Ambil 1 hasil teratas
+      apiKey: geoapifyApiKey
+    };
+
+    logger.info(`[DIAGNOSTIC] Calling Geoapify URL: ${apiUrl} with params: ${JSON.stringify(params)}`);
+
+    const response = await axios.get(apiUrl, { params });
+
+    const features = response.data.features;
+    if (!features || features.length === 0) {
+      logger.warn(`No Geoapify data found for coords: ${latitude},${longitude}`);
+      return {
+        suitability_score: 50,
+        suitability_label: 'Lokasi tidak terdaftar'
+      };
+    }
+
+    // Ambil data tempat pertama yang paling relevan
+    const placeData = features[0];
+
+    // Format data agar sesuai dengan input fuzzyEngine
+    const mockPlaceDetails = {
+      properties: placeData.properties,
+      geometry: {
+        type: 'Point',
+        coordinates: [longitude, latitude]
+      }
+    };
+
+    // Hitung skor menggunakan Fuzzy AHP Engine
+    const scoreResult = await fuzzyEngine.calculateWfaScore(mockPlaceDetails);
+
+    return {
+      suitability_score: scoreResult.score,
+      suitability_label: scoreResult.label
+    };
+  } catch (error) {
+    logger.error(`Failed to get suitability score for custom location: ${error.message}`);
+    // Jika ada error, kembalikan nilai default
+    return {
+      suitability_score: 50,
+      suitability_label: 'Lokasi tidak terdaftar'
+    };
+  }
+}
 
 // BAGIAN 1: Endpoint Membuat Booking (POST /api/bookings)
 export const createBooking = async (req, res, next) => {
   const transaction = await sequelize.transaction();
   try {
     const userId = req.user.id;
-    const { schedule_date, latitude, longitude, radius = 100, description, notes = '' } = req.body; // Parse tanggal menggunakan date-fns untuk akurasi timezone
+    const {
+      schedule_date,
+      latitude,
+      longitude,
+      radius = 100,
+      description,
+      notes = '',
+      suitability_score: provided_score,
+      suitability_label: provided_label
+    } = req.body;
     // Format input: "DD-MM-YYYY" -> parse dengan format "dd-MM-yyyy"
     const scheduleDate = parse(schedule_date, 'dd-MM-yyyy', new Date());
 
@@ -66,6 +147,27 @@ export const createBooking = async (req, res, next) => {
       });
     }
 
+    // Langkah Tambahan: Hitung atau gunakan Suitability Score yang ada
+    let suitability_score;
+    let suitability_label;
+
+    if (provided_score && provided_label) {
+      // Gunakan skor dari rekomendasi jika tersedia
+      suitability_score = provided_score;
+      suitability_label = provided_label;
+      logger.info(
+        `Using provided suitability score: ${suitability_score} (${suitability_label}) for user ${userId}`
+      );
+    } else {
+      // Hitung skor untuk lokasi kustom (manual)
+      const scoreResult = await getSuitabilityScoreForCustomLocation(latitude, longitude);
+      suitability_score = scoreResult.suitability_score;
+      suitability_label = scoreResult.suitability_label;
+      logger.info(
+        `Calculated suitability score for custom location: ${suitability_score} (${suitability_label}) for user ${userId}`
+      );
+    }
+
     // Proses Database:
     // 1. Buat entri baru di tabel locations
     const newLocation = await Location.create(
@@ -86,6 +188,8 @@ export const createBooking = async (req, res, next) => {
         location_id: newLocation.location_id,
         notes: notes,
         status: 3, // pending
+        suitability_score, // Simpan skor
+        suitability_label, // Simpan label
         created_at: new Date()
       },
       { transaction }
@@ -101,7 +205,9 @@ export const createBooking = async (req, res, next) => {
         booking_id: newBooking.booking_id,
         schedule_date: newBooking.schedule_date,
         location_id: newBooking.location_id,
-        status: 'pending'
+        status: 'pending',
+        suitability_score: newBooking.suitability_score,
+        suitability_label: newBooking.suitability_label
       }
     });
   } catch (error) {
@@ -304,6 +410,8 @@ export const getAllBookings = async (req, res, next) => {
         description: booking.location.description
       },
       notes: booking.notes,
+      suitability_score: parseFloat(booking.suitability_score) || null,
+      suitability_label: booking.suitability_label,
       created_at: booking.created_at,
       processed_at: booking.processed_at,
       approved_by: booking.approved_by
@@ -386,6 +494,8 @@ export const getMyBookings = async (req, res, next) => {
         description: booking.location.description
       },
       notes: booking.notes,
+      suitability_score: parseFloat(booking.suitability_score) || null,
+      suitability_label: booking.suitability_label,
       created_at: booking.created_at,
       processed_at: booking.processed_at,
       approved_by: booking.approved_by

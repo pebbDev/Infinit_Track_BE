@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Jun 23, 2025 at 02:30 PM
+-- Generation Time: Jul 03, 2025 at 12:02 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.0.30
 
@@ -48,21 +48,24 @@ CREATE TABLE `attendance` (
 --
 
 INSERT INTO `attendance` (`id_attendance`, `user_id`, `category_id`, `status_id`, `location_id`, `booking_id`, `time_in`, `time_out`, `work_hour`, `attendance_date`, `notes`, `created_at`, `updated_at`) VALUES
-(2, 21, 1, 2, NULL, NULL, '2025-06-17 09:32:58', NULL, 0.00, '2025-06-17', 'Check-in from office', '2025-06-17 09:32:58', '2025-06-17 09:32:58'),
-(3, 11, 1, 2, NULL, NULL, '2025-06-17 11:57:17', NULL, 0.00, '2025-06-17', 'Check-in from office', '2025-06-17 11:57:17', '2025-06-17 11:57:17'),
-(4, 23, 1, 2, NULL, NULL, '2025-06-17 12:04:50', NULL, 0.00, '2025-06-17', 'Check-in from office', '2025-06-17 12:04:50', '2025-06-17 12:04:50'),
-(5, 22, 1, 2, NULL, NULL, '2025-06-17 12:06:41', NULL, 0.00, '2025-06-17', 'Check-in from office', '2025-06-17 12:06:41', '2025-06-17 12:06:41'),
+(2, 21, 1, 2, NULL, NULL, '2025-06-17 09:32:58', '2025-06-17 16:28:46', 6.93, '2025-06-17', 'Check-in from office\nSesi diakhiri otomatis oleh Smart Auto Checkout System.', '2025-06-17 09:32:58', '2025-06-23 23:40:13'),
+(3, 11, 1, 2, NULL, NULL, '2025-06-17 11:57:17', '2025-06-17 19:43:29', 7.77, '2025-06-17', 'Check-in from office\nSesi diakhiri otomatis oleh Smart Auto Checkout System.', '2025-06-17 11:57:17', '2025-06-23 23:40:13'),
+(4, 23, 1, 2, NULL, NULL, '2025-06-17 12:04:50', '2025-06-17 19:45:02', 7.67, '2025-06-17', 'Check-in from office\nSesi diakhiri otomatis oleh Smart Auto Checkout System.', '2025-06-17 12:04:50', '2025-06-23 23:40:13'),
+(5, 22, 1, 2, NULL, NULL, '2025-06-17 12:06:41', '2025-06-17 19:45:05', 7.64, '2025-06-17', 'Check-in from office\nSesi diakhiri otomatis oleh Smart Auto Checkout System.', '2025-06-17 12:06:41', '2025-06-23 23:40:13'),
 (7, 4, 2, 2, 3, NULL, '2025-06-06 14:12:05', '2025-06-07 00:00:00', 9.80, '2025-06-06', 'Check-in from office\nSesi diakhiri otomatis oleh sistem.', '2025-06-06 14:12:05', '2025-06-09 01:18:21'),
 (8, 7, 1, 2, 1, NULL, '2025-06-06 16:35:07', '2025-06-07 00:00:00', 7.41, '2025-06-06', 'Check-in from office\nSesi diakhiri otomatis oleh sistem.', '2025-06-06 16:35:07', '2025-06-09 01:18:21'),
 (9, 13, 1, 2, 1, NULL, '2025-06-09 18:26:02', '2025-06-09 18:26:38', 0.01, '2025-06-09', 'Check-in from office', '2025-06-09 18:26:02', '2025-06-09 18:26:02'),
 (10, 13, 1, 2, 1, NULL, '2025-06-10 18:36:28', '2025-06-10 18:37:44', 0.02, '2025-06-10', 'Check-in from office', '2025-06-10 18:36:28', '2025-06-10 18:36:28'),
 (11, 13, 1, 1, 1, NULL, '2025-06-18 08:50:37', '2025-06-18 08:51:36', 0.02, '2025-06-18', 'Check-in from office', '2025-06-18 08:50:37', '2025-06-18 08:50:37'),
 (12, 4, 1, 2, 1, NULL, '2025-06-18 12:41:18', '2025-06-18 12:43:25', 0.04, '2025-06-18', 'Check-in from office', '2025-06-18 12:41:18', '2025-06-18 12:41:18'),
-(13, 20, 1, 2, 1, NULL, '2025-06-18 16:11:17', NULL, 0.00, '2025-06-18', 'Check-in from office', '2025-06-18 16:11:17', '2025-06-18 16:11:17'),
+(13, 20, 1, 2, 1, NULL, '2025-06-18 16:11:17', '2025-06-19 05:53:17', 13.70, '2025-06-18', 'Check-in from office\nSesi diakhiri otomatis oleh Smart Auto Checkout System.', '2025-06-18 16:11:17', '2025-06-23 23:40:13'),
 (14, 20, 1, 2, 1, NULL, '2025-06-11 19:14:15', '2025-06-11 19:15:19', 0.02, '2025-06-11', 'Check-in from office', '2025-06-11 19:14:15', '2025-06-11 19:14:15'),
 (15, 20, 3, 2, 34, 11, '2025-06-24 17:18:58', '2025-06-24 17:22:31', 0.06, '2025-06-24', 'Check-in from office', '2025-06-24 17:18:58', '2025-06-24 17:18:58'),
 (16, 20, 1, 2, 1, NULL, '2025-06-26 17:27:33', '2025-06-26 17:28:39', 0.02, '2025-06-26', '', '2025-06-26 17:27:33', '2025-06-26 17:27:33'),
-(17, 20, 3, 2, 40, 17, '2025-06-29 18:13:57', '2025-06-29 18:14:46', 0.01, '2025-06-29', '', '2025-06-29 18:13:57', '2025-06-29 18:13:57');
+(17, 20, 3, 2, 40, 17, '2025-06-29 18:13:57', '2025-06-29 18:14:46', 0.01, '2025-06-29', '', '2025-06-29 18:13:57', '2025-06-29 18:13:57'),
+(18, 20, 1, 2, 1, NULL, '2025-06-23 19:51:35', '2025-06-24 06:50:00', 10.97, '2025-06-23', 'Sesi diakhiri otomatis oleh sistem (fallback method).', '2025-06-23 19:51:35', '2025-06-23 22:49:34'),
+(19, 20, 1, 2, 1, NULL, '2025-06-30 15:38:06', '2025-06-30 15:41:52', 0.06, '2025-06-30', '', '2025-06-30 15:38:06', '2025-06-30 15:38:06'),
+(20, 20, 1, 1, 1, NULL, '2025-07-02 08:54:52', NULL, 0.00, '2025-07-02', '', '2025-07-02 08:54:52', '2025-07-02 08:54:52');
 
 -- --------------------------------------------------------
 
@@ -102,7 +105,8 @@ CREATE TABLE `attendance_statuses` (
 INSERT INTO `attendance_statuses` (`id_attendance_status`, `attendance_status_name`) VALUES
 (1, 'ontime'),
 (2, 'late'),
-(3, 'alpha');
+(3, 'alpha'),
+(4, 'early');
 
 -- --------------------------------------------------------
 
@@ -133,7 +137,6 @@ INSERT INTO `bookings` (`booking_id`, `user_id`, `schedule_date`, `location_id`,
 (2, 21, '2025-06-20', 22, 1, 'Saya ingin bersantai-santai dong', '2025-06-06 01:07:11', 12, '2025-06-06 07:17:45', NULL, NULL, NULL),
 (3, 7, '2025-06-20', 25, 1, 'Saya ingin bersantai-santai dong', '2025-06-06 07:16:23', 13, '2025-06-08 11:14:12', NULL, NULL, NULL),
 (7, 13, '2025-06-24', 30, 1, 'Saya ingin bersantai-santai dong', '2025-06-09 11:07:29', 12, '2025-06-09 11:08:32', NULL, NULL, NULL),
-(8, 23, '2025-06-24', 31, 2, 'Saya ingin bersantai-santai dong', '2025-06-18 06:10:42', 12, '2025-06-18 06:21:50', NULL, NULL, NULL),
 (9, 22, '2025-06-24', 32, 1, 'Saya ingin bersantai-santai dong', '2025-06-18 06:20:01', 22, '2025-06-18 06:20:19', NULL, NULL, NULL),
 (10, 20, '2025-06-21', 33, 1, 'Saya ingin bersantai-santai dong', '2025-06-20 22:20:47', 20, '2025-06-20 10:03:20', NULL, NULL, NULL),
 (11, 20, '2025-06-24', 34, 1, 'Saya ingin bersantai-santai dong', '2025-06-23 10:14:53', 20, '2025-06-23 10:15:33', NULL, NULL, NULL),
@@ -226,7 +229,7 @@ CREATE TABLE `locations` (
 --
 
 INSERT INTO `locations` (`location_id`, `latitude`, `longitude`, `radius`, `id_attendance_categories`, `description`, `user_id`, `created_at`) VALUES
-(1, -0.842080, 119.892640, 100.00, 1, 'Kantor Pusat Infinite Learning', NULL, '2025-06-17 13:35:22'),
+(1, -0.842206, 119.892728, 100.00, 1, 'Kantor Pusat Infinite Learning', NULL, '2025-06-17 13:35:22'),
 (2, -6.208800, 106.845600, 150.00, 2, 'Rumah utama', 3, '2025-05-26 08:00:09'),
 (3, -6.208800, 106.845600, 100.00, 2, 'Rumah utama', 4, '2025-05-26 08:30:37'),
 (4, -6.208800, 106.845600, 100.00, 2, 'Rumah utama', 7, '2025-05-27 08:04:50'),
@@ -251,7 +254,6 @@ INSERT INTO `locations` (`location_id`, `latitude`, `longitude`, `radius`, `id_a
 (25, -6.208800, 106.845600, 100.00, 3, 'Coffee Shop di Menteng', 7, '2025-06-06 07:16:23'),
 (26, 1.132891, 104.112624, 999.99, 2, 'Jalan Hang Tuah, Batu Besar, Batam, Riau Islands, Sumatra, 29467, Indonesia', 24, '2025-06-07 11:30:36'),
 (30, -6.208800, 106.845600, 100.00, 3, 'Ruko', 13, '2025-06-09 11:07:29'),
-(31, -6.208800, 106.845600, 100.00, 3, 'Ruko', 23, '2025-06-18 06:10:42'),
 (32, -6.208800, 106.845600, 100.00, 3, 'Ruko', 22, '2025-06-18 06:20:01'),
 (33, -6.208800, 106.845600, 100.00, 3, 'Ruko', 20, '2025-06-20 22:20:46'),
 (34, -6.208800, 106.845600, 100.00, 3, 'Ruko', 20, '2025-06-23 10:14:53'),
@@ -275,6 +277,33 @@ CREATE TABLE `location_events` (
   `event_type` enum('ENTER','EXIT') NOT NULL,
   `event_timestamp` datetime NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `location_events`
+--
+
+INSERT INTO `location_events` (`id`, `user_id`, `location_id`, `event_type`, `event_timestamp`) VALUES
+(1, 20, 1, 'EXIT', '2025-06-23 08:50:00'),
+(2, 20, 1, 'ENTER', '2025-06-23 09:50:00'),
+(3, 20, 1, 'ENTER', '2025-06-23 09:50:00'),
+(4, 20, 1, 'ENTER', '2025-06-23 09:50:00'),
+(5, 20, 1, 'ENTER', '2025-06-23 09:50:00'),
+(6, 20, 1, 'ENTER', '2025-06-23 12:50:00'),
+(7, 20, 1, 'ENTER', '2025-06-23 12:50:00'),
+(8, 20, 1, 'ENTER', '2025-07-02 17:00:00'),
+(9, 20, 1, 'ENTER', '2025-07-02 18:00:00'),
+(10, 20, 1, 'ENTER', '2025-07-02 18:00:00'),
+(11, 20, 1, 'ENTER', '2025-07-02 18:00:00'),
+(12, 20, 1, 'ENTER', '2025-07-02 18:00:00'),
+(13, 20, 1, 'ENTER', '2025-07-02 18:00:00'),
+(14, 20, 1, 'ENTER', '2025-07-02 18:00:00'),
+(15, 20, 1, 'ENTER', '2025-07-02 18:00:00'),
+(16, 20, 1, 'ENTER', '2025-07-02 18:00:00'),
+(17, 20, 1, 'ENTER', '2025-07-02 18:00:00'),
+(18, 20, 1, 'ENTER', '2025-07-02 18:00:00'),
+(19, 20, 1, 'ENTER', '2025-07-02 18:00:00'),
+(20, 20, 1, 'ENTER', '2025-07-02 19:00:00'),
+(21, 20, 1, 'ENTER', '2025-07-02 19:10:00');
 
 -- --------------------------------------------------------
 
@@ -433,7 +462,9 @@ INSERT INTO `settings` (`setting_key`, `setting_value`, `description`, `updated_
 ('checkout.auto_time', '23:50:00', 'Cek out', '2025-06-09'),
 ('checkout.flexible', 'true', 'check-out valid', '0000-00-00'),
 ('checkin.end_time', '22:00:00', 'Waktu paling akhir pengguna bisa melakukan check-in', '0000-00-00'),
-('wfa.recommendation.search_radius', '10000', 'Radius pencarian (dalam meter) default untuk fitur rekomendasi lokasi WFA.', '0000-00-00');
+('wfa.recommendation.search_radius', '10000', 'Radius pencarian (dalam meter) default untuk fitur rekomendasi lokasi WFA.', '0000-00-00'),
+('checkout.smart_enabled', 'true', 'Smart Auto Checkout menggunakan Fuzzy AHP untuk prediksi waktu pulang', '2025-06-29'),
+('checkout.fallback_time', '17:00:00', 'Waktu fallback jika smart prediction gagal', '2025-06-23');
 
 -- --------------------------------------------------------
 
@@ -614,7 +645,7 @@ ALTER TABLE `users`
 -- AUTO_INCREMENT for table `attendance`
 --
 ALTER TABLE `attendance`
-  MODIFY `id_attendance` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=18;
+  MODIFY `id_attendance` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=21;
 
 --
 -- AUTO_INCREMENT for table `attendance_categories`
@@ -626,7 +657,7 @@ ALTER TABLE `attendance_categories`
 -- AUTO_INCREMENT for table `attendance_statuses`
 --
 ALTER TABLE `attendance_statuses`
-  MODIFY `id_attendance_status` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id_attendance_status` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 
 --
 -- AUTO_INCREMENT for table `bookings`
@@ -662,7 +693,7 @@ ALTER TABLE `locations`
 -- AUTO_INCREMENT for table `location_events`
 --
 ALTER TABLE `location_events`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=22;
 
 --
 -- AUTO_INCREMENT for table `photos`

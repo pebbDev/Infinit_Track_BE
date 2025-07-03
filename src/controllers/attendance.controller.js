@@ -1773,7 +1773,7 @@ export const logLocationEvent = async (req, res, next) => {
     const user_id = req.user.id; // Get user_id from verified JWT token
 
     logger.info(
-      `Logging location event for user ${user_id}: ${event_type} at location ${location_id}`
+      `Logging location event for user ${user_id}: ${event_type} at location ${location_id} at ${event_timestamp}`
     );
 
     // Verify that the location exists before creating the event
@@ -1786,17 +1786,85 @@ export const logLocationEvent = async (req, res, next) => {
       });
     }
 
+    // Parse event timestamp and handle timezone conversion
+    const eventDateTime = new Date(event_timestamp);
+
+    // Validate that the event timestamp is valid
+    if (isNaN(eventDateTime.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: 'Format timestamp tidak valid',
+        error: 'INVALID_TIMESTAMP'
+      });
+    }
+
+    // Convert to Jakarta timezone for date comparison
+    // Use Intl.DateTimeFormat to get the date in Jakarta timezone
+    const jakartaFormatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Jakarta',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    const eventDate = jakartaFormatter.format(eventDateTime);
+
+    logger.info(`Event date for attendance lookup (Jakarta timezone): ${eventDate}`);
+
+    // Check if the user has an active attendance session for the event date
+    const activeAttendance = await Attendance.findOne({
+      where: {
+        user_id,
+        attendance_date: eventDate
+      }
+    });
+
+    // Validate that user has an active attendance session (checked-in but not checked-out)
+    if (!activeAttendance) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'Tidak dapat mencatat lokasi event: Anda belum melakukan check-in pada tanggal tersebut',
+        error: 'NO_ACTIVE_SESSION'
+      });
+    }
+
+    if (activeAttendance.check_out_time) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'Tidak dapat mencatat lokasi event: Anda sudah melakukan check-out pada tanggal tersebut',
+        error: 'SESSION_ALREADY_ENDED'
+      });
+    }
+
     // Create the location event record
+    // Sequelize will handle timezone conversion based on the database config
     const locationEvent = await LocationEvent.create({
       user_id,
       location_id,
       event_type,
-      event_timestamp: new Date(event_timestamp)
+      event_timestamp: eventDateTime
     });
 
-    logger.info(`Location event created successfully: ID ${locationEvent.id}`);
+    logger.info(`Location event created successfully: ID ${locationEvent.id} for user ${user_id}`);
 
-    // Return success response
+    // Get current time in Jakarta timezone for recorded_at
+    const now = new Date();
+    const jakartaRecordedAt =
+      new Intl.DateTimeFormat('sv-SE', {
+        timeZone: 'Asia/Jakarta',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        fractionalSecondDigits: 3
+      })
+        .format(now)
+        .replace(' ', 'T') + '+07:00';
+
+    // Return success response with consistent timezone handling
     res.status(201).json({
       success: true,
       message: 'Location event berhasil dicatat',
@@ -1806,7 +1874,7 @@ export const logLocationEvent = async (req, res, next) => {
         location_id: locationEvent.location_id,
         event_type: locationEvent.event_type,
         event_timestamp: locationEvent.event_timestamp,
-        recorded_at: new Date().toISOString()
+        recorded_at: jakartaRecordedAt
       }
     });
   } catch (error) {

@@ -1,780 +1,1116 @@
-# OpenAPI Documentation Stub
-openapi: 3.0.0
-info:
-  title: Infinite Track API
-  version: 0.1.0
-  description: attendance tracking system
-paths:
-  /health:
-    get:
-      summary: Health check
-      responses:
-        200:
-          description: API is healthy
-  /auth/login:
-    post:
-      summary: Login user
-      tags:
-        - Authentication
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - email
-                - password
-              properties:
-                email:
-                  type: string
-                  format: email
-                  description: Email user (akan diubah ke lowercase)
-                  example: user@example.com
-                password:
-                  type: string
-                  format: password
-                  minLength: 8
-                  pattern: '^(?=.*[a-zA-Z])(?=.*[0-9])[a-zA-Z0-9]+$'
-                  description: Password minimal 8 karakter, kombinasi huruf dan angka, tanpa spasi
-                  example: password123
-      responses:
-        200:
-          description: Login berhasil
-          headers:
-            Set-Cookie:
-              description: HTTP-only cookie untuk web clients
-              schema:
-                type: string
-                example: token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...; HttpOnly; Path=/
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  data:
-                    type: object
-                    properties:
-                      id:
-                        type: integer
-                        example: 1
-                      full_name:
-                        type: string
-                        example: John Doe
-                      role:
-                        type: integer
-                        example: 2
-                      photo:
-                        type: string
-                        nullable: true
-                        example: uploads/face/face-123456789.jpg
-                      token:
-                        type: string
-                        description: JWT token (hanya untuk mobile clients)
-                        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-                  message:
-                    type: string
-                    example: Login berhasil
-        400:
-          description: Validation error
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: false
-                  code:
-                    type: string
-                    enum: [E_VALIDATION]
-                    example: E_VALIDATION
-                  message:
-                    type: string
-                    enum: 
-                      - Email tidak terdaftar
-                      - Password salah
-                      - Email wajib diisi
-                      - Format email tidak valid
-                      - Password wajib diisi
-                      - Password minimal 8 karakter
-                      - Password harus kombinasi huruf dan angka tanpa spasi
-                    example: Email tidak terdaftar
-        500:
-          description: Server error
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: false
-                  code:
-                    type: string
-                    example: E_SERVER
-                  message:
-                    type: string
-                    example: Terjadi kesalahan pada server
-  /auth/register:
-    post:
-      summary: Register user baru
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              required:
-                - email
-                - password
-                - role
-                - position
-                - full_name
-                - nip_nim
-                - phone_number
-                - latitude
-                - longitude
-                - face_photo
-              properties:
-                email:
-                  type: string
-                  format: email
-                  example: user@email.com
-                password:
-                  type: string
-                  format: password
-                  minLength: 8
-                  example: password123
-                role:
-                  type: integer
-                  example: 2
-                position:
-                  type: integer
-                  example: 3
-                full_name:
-                  type: string
-                  minLength: 3
-                  example: 'Raihan Saputra'
-                nip_nim:
-                  type: string
-                  example: '12345678'
-                phone_number:
-                  type: string
-                  example: '08123456789'
-                division:
-                  type: integer
-                  example: 1
-                address:
-                  type: string
-                  example: 'Jl. Mawar No. 5'
-                latitude:
-                  type: number
-                  format: float
-                  example: -6.2088
-                longitude:
-                  type: number
-                  format: float
-                  example: 106.8456
-                radius:
-                  type: integer
-                  default: 100
-                  example: 150
-                description:
-                  type: string
-                  example: 'Rumah utama'
-                face_photo:
-                  type: string
-                  format: binary
-                  description: Upload foto wajah (jpg/png, max 1MB)
-      responses:
-        201:
-          description: User berhasil terdaftar
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  data:
-                    type: object
-                    properties:
-                      user:
-                        type: object
-                       
-                          id:
-                            type: integer
-                            example: 12
-                          full_name:
-                            type: string
-                            example: 'Raihan Saputra'
-                          role:
-                            type: integer
-                            example: 2
-                          token:
-                            type: string
-                            nullable: true
-                            example: null
-                      location:
-                        type: object
-                        properties:
-                          location_id:
-                            type: integer
-                            example: 8
-                          lat:
-                            type: number
-                            example: -6.2088
-                          lng:
-                            type: number
-                            example: 106.8456
-                          radius_m:
-                            type: integer
-                            example: 150
-                          description:
-                            type: string
-                            example: 'Rumah utama'
-                  message:
-                    type: string
-                    example: 'Registrasi berhasil'
-        400:
-          description: Validasi gagal
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: false
-                  code:
-                    type: string
-                    example: E_VALIDATION
-                  message:
-                    type: string
-                    example: 'Email sudah ada'
-        500:
-          description: Server error
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: false
-                  code:
-                    type: string
-                    example: E_DB
-                  message:
-                    type: string
-                    example: 'Terjadi kesalahan pada server'
-  /auth/me:
-    get:
-      summary: Get current user profile
-      tags:
-        - Authentication
-      security:
-        - cookieAuth: []
-        - bearerAuth: []
-      description: |
-        Mengambil data profil lengkap pengguna yang sedang login.
-        Endpoint ini memverifikasi sesi pengguna yang aktif melalui token JWT 
-        yang ada di HttpOnly cookie atau Authorization header.
-      responses:
-        200:
-          description: User profile berhasil diambil
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  data:
-                    type: object
-                    properties:
-                      id:
-                        type: integer
-                        example: 1
-                      full_name:
-                        type: string
-                        example: "John Doe"
-                      email:
-                        type: string
-                        format: email
-                        example: "john.doe@example.com"
-                      role_name:
-                        type: string
-                        nullable: true
-                        example: "Employee"
-                      position_name:
-                        type: string
-                        nullable: true
-                        example: "Software Developer"
-                      program_name:
-                        type: string
-                        nullable: true
-                        example: "Professional Mentor"
-                      division_name:
-                        type: string
-                        nullable: true
-                        example: "IT Department"
-                      nip_nim:
-                        type: string
-                        example: "12345678"
-                      phone:
-                        type: string
-                        example: "08123456789"
-                      photo:
-                        type: string
-                        nullable: true
-                        example: "uploads/face/face-1748328939015-726641452.jpg"
-                      photo_updated_at:
-                        type: string
-                        format: date-time
-                        nullable: true
-                        example: "2025-06-02T10:30:00.000Z"
-                      location:
-                        type: object
-                        nullable: true
-                        properties:
-                          latitude:
-                            type: number
-                            format: float
-                            example: -6.2088
-                          longitude:
-                            type: number
-                            format: float
-                            example: 106.8456
-                          radius:
-                            type: number
-                            format: float
-                            example: 100.0
-                          description:
-                            type: string
-                            example: "Default WFH Location"
-                          category_name:
-                            type: string
-                            example: "Work From Home"
-                  message:
-                    type: string
-                    example: "User profile fetched successfully"
-        401:
-          description: Unauthorized - Token tidak valid atau tidak ada
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    enum:
-                      - "No token provided"
-                      - "Invalid token"
-                    example: "No token provided"
-        404:
-          description: User tidak ditemukan
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: false
-                  code:
-                    type: string
-                    example: "E_USER_NOT_FOUND"
-                  message:
-                    type: string
-                    example: "User tidak ditemukan"
-        500:
-          description: Server error
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: false                  message:
-                    type: string
-                    example: "Terjadi kesalahan pada server"
-  /api/wfa/recommendations:
-    get:
-      summary: Get WFA (Work From Anywhere) recommendations
-      description: |
-        Mendapatkan rekomendasi tempat untuk bekerja berdasarkan lokasi pengguna.
-        Menggunakan algoritma Balanced Scoring yang menggabungkan:
-        - Jenis tempat (50%): Kesesuaian kategori untuk bekerja
-        - Internet (30%): Ketersediaan WiFi/koneksi internet  
-        - Jarak (20%): Jarak dari lokasi pengguna
-      tags:
-        - WFA (Work From Anywhere)
-      security:
-        - bearerAuth: []
-        - cookieAuth: []
-      parameters:
-        - name: lat
-          in: query
-          required: true
-          schema:
-            type: number
-            minimum: -90
-            maximum: 90
-          description: Latitude lokasi pengguna
-          example: -0.84208
-        - name: lng
-          in: query
-          required: true
-          schema:
-            type: number
-            minimum: -180
-            maximum: 180
-          description: Longitude lokasi pengguna
-          example: 119.89264
-      responses:
-        200:
-          description: Rekomendasi berhasil didapatkan
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  data:
-                    type: object
-                    properties:
-                      recommendations:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            name:
-                              type: string
-                              description: Nama tempat
-                              example: "Kopi Kebangsaan Cafe"
-                            address:
-                              type: string
-                              description: Alamat lengkap
-                              example: "Jalan Diponegoro No. 15, Palu, Central Sulawesi"
-                            latitude:
-                              type: number
-                              description: Koordinat latitude
-                              example: -0.8421
-                            longitude:
-                              type: number
-                              description: Koordinat longitude
-                              example: 119.8926
-                            suitability_score:
-                              type: number
-                              minimum: 0
-                              maximum: 100
-                              description: Skor kesesuaian (0-100)
-                              example: 87.5
-                            suitability_label:
-                              type: string
-                              enum: ["Sangat Direkomendasikan", "Baik", "Cukup", "Kurang Sesuai", "Tidak Direkomendasikan"]
-                              description: Label kategori kesesuaian
-                              example: "Sangat Direkomendasikan"
-                            category:
-                              type: string
-                              enum: ["cafe", "coworking", "library", "hotel", "restaurant", "other"]
-                              description: Kategori tempat
-                              example: "cafe"
-                            distance_from_center:
-                              type: integer
-                              minimum: 0
-                              description: Jarak dari user dalam meter
-                              example: 250
-                            score_details:
-                              type: object
-                              description: Detail breakdown scoring untuk debugging
-                              properties:
-                                final_score:
-                                  type: number
-                                  example: 87.5
-                                component_scores:
-                                  type: object
-                                  properties:
-                                    type_score:
-                                      type: integer
-                                      example: 100
-                                    internet_score:
-                                      type: integer
-                                      example: 75
-                                    distance_score:
-                                      type: integer
-                                      example: 95
-                                    raw_score:
-                                      type: number
-                                      example: 87.5
-                                    fuzzy_enhancement:
-                                      type: number
-                                      example: 1.05
-                                evaluations:
-                                  type: object
-                                  properties:
-                                    type:
-                                      type: string
-                                      example: "cafe"
-                                    internet:
-                                      type: string
-                                      example: "assumed_wifi"
-                                    distance:
-                                      type: string
-                                      example: "very_close"
-                                weights_used:
-                                  type: object
-                                  properties:
-                                    type:
-                                      type: number
-                                      example: 0.5
-                                    internet:
-                                      type: number
-                                      example: 0.3
-                                    distance:
-                                      type: number
-                                      example: 0.2
-                      search_criteria:
-                        type: object
-                        properties:
-                          center_latitude:
-                            type: number
-                            example: -0.84208
-                          center_longitude:
-                            type: number
-                            example: 119.89264
-                          search_radius_meters:
-                            type: integer
-                            example: 5000
-                          categories_searched:
-                            type: array
-                            items:
-                              type: string
-                            example: ["office.coworking", "education.library", "catering.cafe", "accommodation.hotel"]
-                          total_candidates_found:
-                            type: integer
-                            example: 15
-                          recommendations_returned:
-                            type: integer
-                            example: 10
-                      fuzzy_ahp_methodology:
-                        type: object
-                        properties:
-                          approach:
-                            type: string
-                            example: "Balanced Scoring - Realistic and Forgiving Algorithm"
-                          weights_used:
-                            type: object
-                            properties:
-                              type:
-                                type: number
-                                example: 0.5
-                              internet:
-                                type: number
-                                example: 0.3
-                              distance:
-                                type: number
-                                example: 0.2
-                          scoring_ranges:
-                            type: object
-                            properties:
-                              type:
-                                type: string
-                                example: "30-100 (based on place category)"
-                              internet:
-                                type: string
-                                example: "30-100 (based on availability and place type)"
-                              distance:
-                                type: string
-                                example: "20-100 (gradual decrease with distance)"
-                  message:
-                    type: string
-                    example: "Rekomendasi WFA berhasil diambil menggunakan Balanced Scoring Algorithm"
-        400:
-          description: Bad Request - Parameter tidak valid
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: false
-                  code:
-                    type: string
-                    enum: ["E_VALIDATION"]
-                    example: "E_VALIDATION"
-                  message:
-                    type: string
-                    examples:
-                      missing_params:
-                        value: "Parameter lat dan lng wajib diisi"
-                      invalid_format:
-                        value: "Format koordinat tidak valid"
-                      out_of_range:
-                        value: "Latitude harus antara -90 dan 90"
-        401:
-          description: Unauthorized - Token tidak valid
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: false
-                  code:
-                    type: string
-                    example: "E_UNAUTHORIZED"
-                  message:
-                    type: string
-                    example: "Token tidak valid atau sudah kedaluwarsa"
-        408:
-          description: Request Timeout
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: false
-                  code:
-                    type: string
-                    example: "E_TIMEOUT"
-                  message:
-                    type: string
-                    example: "Request timeout - Layanan Geoapify membutuhkan waktu terlalu lama untuk merespons. Silakan coba lagi."
-        429:
-          description: Too Many Requests
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: false
-                  code:
-                    type: string
-                    example: "E_RATE_LIMIT"
-                  message:
-                    type: string
-                    example: "Terlalu banyak permintaan ke API Geoapify, coba lagi dalam beberapa menit"
-        500:
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: false
-                  code:
-                    type: string
-                    enum: ["E_CONFIG", "E_API_KEY"]
-                    example: "E_CONFIG"
-                  message:
-                    type: string
-                    examples:
-                      config_error:
-                        value: "API key Geoapify tidak ditemukan"
-                      api_key_error:
-                        value: "API key Geoapify tidak valid atau tidak memiliki akses"
-        503:
-          description: Service Unavailable
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: false
-                  code:
-                    type: string
-                    enum: ["E_SERVICE_UNAVAILABLE", "E_EXTERNAL_SERVER"]
-                    example: "E_SERVICE_UNAVAILABLE"
-                  message:
-                    type: string
-                    examples:
-                      service_unavailable:
-                        value: "Layanan Geoapify sedang tidak tersedia"
-                      external_server:
-                        value: "Server Geoapify mengalami masalah internal"
-  /api/wfa/ahp-config:
-    get:
-      summary: Get AHP configuration for WFA recommendations
-      description: Mendapatkan konfigurasi algoritma dan bobot kriteria yang digunakan
-      tags:
-        - WFA (Work From Anywhere)
-      security:
-        - bearerAuth: []
-        - cookieAuth: []
-      responses:
-        200:
-          description: Konfigurasi berhasil didapatkan
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  data:
-                    type: object
-                    properties:
-                      current_weights:
-                        type: object
-                        properties:
-                          type:
-                            type: number
-                            example: 0.5
-                          internet:
-                            type: number
-                            example: 0.3
-                          distance:
-                            type: number
-                            example: 0.2
-                      method:
-                        type: string
-                        example: "Balanced Scoring Algorithm"
-                      criteria_explanation:
-                        type: object
-                        properties:
-                          type:
-                            type: string
-                            example: "Kesesuaian jenis tempat untuk bekerja"
-                          internet:
-                            type: string
-                            example: "Ketersediaan akses internet/WiFi"
-                          distance:
-                            type: string
-                            example: "Jarak dari lokasi pengguna"
-                  message:
-                    type: string
-                    example: "Konfigurasi berhasil diambil"
-components:
-  securitySchemes:
-    cookieAuth:
-      type: apiKey
-      in: cookie
-      name: token
-      description: JWT token in HttpOnly cookie
-    bearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
-      description: JWT token in Authorization header
+# # OpenAPI Documentation Stub
+# openapi: 3.0.0
+# info:
+#   title: Infinite Track API
+#   version: 0.2.0
+#   description: |
+#     Advanced attendance tracking system with analytics features
+
+#     **Latest Updates (July 2, 2025):**
+#     - Enhanced Location Event Logging with active session validation
+#     - WFA Recommendation System with Fuzzy AHP Engine
+#     - Employee Discipline Index calculation
+#     - Smart Auto Check-out with predictive intelligence
+#     - Timezone consistency fixes (Asia/Jakarta)
+# tags:
+#   - name: Authentication
+#     description: User authentication and authorization
+#   - name: Attendance
+#     description: Attendance tracking and location event logging
+#   - name: WFA (Work From Anywhere)
+#     description: Work From Anywhere recommendations and analytics
+# paths:
+#   /health:
+#     get:
+#       summary: Health check
+#       responses:
+#         200:
+#           description: API is healthy
+#   /auth/login:
+#     post:
+#       summary: Login user
+#       tags:
+#         - Authentication
+#       requestBody:
+#         required: true
+#         content:
+#           application/json:
+#             schema:
+#               type: object
+#               required:
+#                 - email
+#                 - password
+#               properties:
+#                 email:
+#                   type: string
+#                   format: email
+#                   description: Email user (akan diubah ke lowercase)
+#                   example: user@example.com
+#                 password:
+#                   type: string
+#                   format: password
+#                   minLength: 8
+#                   pattern: '^(?=.*[a-zA-Z])(?=.*[0-9])[a-zA-Z0-9]+$'
+#                   description: Password minimal 8 karakter, kombinasi huruf dan angka, tanpa spasi
+#                   example: password123
+#       responses:
+#         200:
+#           description: Login berhasil
+#           headers:
+#             Set-Cookie:
+#               description: HTTP-only cookie untuk web clients
+#               schema:
+#                 type: string
+#                 example: token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...; HttpOnly; Path=/
+#           content:
+#             application/json:
+#               schema:
+#                 type: object
+#                 properties:
+#                   success:
+#                     type: boolean
+#                     example: true
+#                   data:
+#                     type: object
+#                     properties:
+#                       id:
+#                         type: integer
+#                         example: 1
+#                       full_name:
+#                         type: string
+#                         example: John Doe
+#                       role:
+#                         type: integer
+#                         example: 2
+#                       photo:
+#                         type: string
+#                         nullable: true
+#                         example: uploads/face/face-123456789.jpg
+#                       token:
+#                         type: string
+#                         description: JWT token (hanya untuk mobile clients)
+#                         example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+#                   message:
+#                     type: string
+#                     example: Login berhasil
+#         400:
+#           description: Validation error
+#           content:
+#             application/json:
+#               schema:
+#                 type: object
+#                 properties:
+#                   success:
+#                     type: boolean
+#                     example: false
+#                   code:
+#                     type: string
+#                     enum: [E_VALIDATION]
+#                     example: E_VALIDATION
+#                   message:
+#                     type: string
+#                     enum:
+#                       - Email tidak terdaftar
+#                       - Password salah
+#                       - Email wajib diisi
+#                       - Format email tidak valid
+#                       - Password wajib diisi
+#                       - Password minimal 8 karakter
+#                       - Password harus kombinasi huruf dan angka tanpa spasi
+#                     example: Email tidak terdaftar
+#         500:
+#           description: Server error
+#           content:
+#             application/json:
+#               schema:
+#                 type: object
+#                 properties:
+#                   success:
+#                     type: boolean
+#                     example: false
+#                   code:
+#                     type: string
+#                     example: E_SERVER
+#                   message:
+#                     type: string
+#                     example: Terjadi kesalahan pada server
+#   /auth/register:
+#     post:
+#       summary: Register user baru
+#       requestBody:
+#         required: true
+#         content:
+#           multipart/form-data:
+#             schema:
+#               type: object
+#               required:
+#                 - email
+#                 - password
+#                 - role
+#                 - position
+#                 - full_name
+#                 - nip_nim
+#                 - phone_number
+#                 - latitude
+#                 - longitude
+#                 - face_photo
+#               properties:
+#                 email:
+#                   type: string
+#                   format: email
+#                   example: user@email.com
+#                 password:
+#                   type: string
+#                   format: password
+#                   minLength: 8
+#                   example: password123
+#                 role:
+#                   type: integer
+#                   example: 2
+#                 position:
+#                   type: integer
+#                   example: 3
+#                 full_name:
+#                   type: string
+#                   minLength: 3
+#                   example: 'Raihan Saputra'
+#                 nip_nim:
+#                   type: string
+#                   example: '12345678'
+#                 phone_number:
+#                   type: string
+#                   example: '08123456789'
+#                 division:
+#                   type: integer
+#                   example: 1
+#                 address:
+#                   type: string
+#                   example: 'Jl. Mawar No. 5'
+#                 latitude:
+#                   type: number
+#                   format: float
+#                   example: -6.2088
+#                 longitude:
+#                   type: number
+#                   format: float
+#                   example: 106.8456
+#                 radius:
+#                   type: integer
+#                   default: 100
+#                   example: 150
+#                 description:
+#                   type: string
+#                   example: 'Rumah utama'
+#                 face_photo:
+#                   type: string
+#                   format: binary
+#                   description: Upload foto wajah (jpg/png, max 1MB)
+#       responses:
+#         201:
+#           description: User berhasil terdaftar
+#           content:
+#             application/json:
+#               schema:
+#                 type: object
+#                 properties:
+#                   success:
+#                     type: boolean
+#                     example: true
+#                   data:
+#                     type: object
+#                     properties:
+#                       user:
+#                         type: object
+
+#                           id:
+#                             type: integer
+#                             example: 12
+#                           full_name:
+#                             type: string
+#                             example: 'Raihan Saputra'
+#                           role:
+#                             type: integer
+#                             example: 2
+#                           token:
+#                             type: string
+#                             nullable: true
+#                             example: null
+#                       location:
+#                         type: object
+#                         properties:
+#                           location_id:
+#                             type: integer
+#                             example: 8
+#                           lat:
+#                             type: number
+#                             example: -6.2088
+#                           lng:
+#                             type: number
+#                             example: 106.8456
+#                           radius_m:
+#                             type: integer
+#                             example: 150
+#                           description:
+#                             type: string
+#                             example: 'Rumah utama'
+#                   message:
+#                     type: string
+#                     example: 'Registrasi berhasil'
+#         400:
+#           description: Validasi gagal
+#           content:
+#             application/json:
+#               schema:
+#                 type: object
+#                 properties:
+#                   success:
+#                     type: boolean
+#                     example: false
+#                   code:
+#                     type: string
+#                     example: E_VALIDATION
+#                   message:
+#                     type: string
+#                     example: 'Email sudah ada'
+#         500:
+#           description: Server error
+#           content:
+#             application/json:
+#               schema:
+#                 type: object
+#                 properties:
+#                   success:
+#                     type: boolean
+#                     example: false
+#                   code:
+#                     type: string
+#                     example: E_DB
+#                   message:
+#                     type: string
+#                     example: 'Terjadi kesalahan pada server'
+#   /auth/me:
+#     get:
+#       summary: Get current user profile
+#       tags:
+#         - Authentication
+#       security:
+#         - cookieAuth: []
+#         - bearerAuth: []
+#       description: |
+#         Mengambil data profil lengkap pengguna yang sedang login.
+#         Endpoint ini memverifikasi sesi pengguna yang aktif melalui token JWT
+#         yang ada di HttpOnly cookie atau Authorization header.
+#       responses:
+#         200:
+#           description: User profile berhasil diambil
+#           content:
+#             application/json:
+#               schema:
+#                 type: object
+#                 properties:
+#                   success:
+#                     type: boolean
+#                     example: true
+#                   data:
+#                     type: object
+#                     properties:
+#                       id:
+#                         type: integer
+#                         example: 1
+#                       full_name:
+#                         type: string
+#                         example: "John Doe"
+#                       email:
+#                         type: string
+#                         format: email
+#                         example: "john.doe@example.com"
+#                       role_name:
+#                         type: string
+#                         nullable: true
+#                         example: "Employee"
+#                       position_name:
+#                         type: string
+#                         nullable: true
+#                         example: "Software Developer"
+#                       program_name:
+#                         type: string
+#                         nullable: true
+#                         example: "Professional Mentor"
+#                       division_name:
+#                         type: string
+#                         nullable: true
+#                         example: "IT Department"
+#                       nip_nim:
+#                         type: string
+#                         example: "12345678"
+#                       phone:
+#                         type: string
+#                         example: "08123456789"
+#                       photo:
+#                         type: string
+#                         nullable: true
+#                         example: "uploads/face/face-1748328939015-726641452.jpg"
+#                       photo_updated_at:
+#                         type: string
+#                         format: date-time
+#                         nullable: true
+#                         example: "2025-06-02T10:30:00.000Z"
+#                       location:
+#                         type: object
+#                         nullable: true
+#                         properties:
+#                           latitude:
+#                             type: number
+#                             format: float
+#                             example: -6.2088
+#                           longitude:
+#                             type: number
+#                             format: float
+#                             example: 106.8456
+#                           radius:
+#                             type: number
+#                             format: float
+#                             example: 100.0
+#                           description:
+#                             type: string
+#                             example: "Default WFH Location"
+#                           category_name:
+#                             type: string
+#                             example: "Work From Home"
+#                   message:
+#                     type: string
+#                     example: "User profile fetched successfully"
+#         401:
+#           description: Unauthorized - Token tidak valid atau tidak ada
+#           content:
+#             application/json:
+#               schema:
+#                 type: object
+#                 properties:
+#                   message:
+#                     type: string
+#                     enum:
+#                       - "No token provided"
+#                       - "Invalid token"
+#                     example: "No token provided"
+#         404:
+#           description: User tidak ditemukan
+#           content:
+#             application/json:
+#               schema:
+#                 type: object
+#                 properties:
+#                   success:
+#                     type: boolean
+#                     example: false
+#                   code:
+#                     type: string
+#                     example: "E_USER_NOT_FOUND"
+#                   message:
+#                     type: string
+#                     example: "User tidak ditemukan"
+#         500:
+#           description: Server error
+#           content:
+#             application/json:
+#               schema:
+#                 type: object
+#                 properties:
+#                   success:
+#                     type: boolean
+#                     example: false                  message:
+#                     type: string
+#                     example: "Terjadi kesalahan pada server"
+#   /api/wfa/recommendations:
+#     get:
+#       summary: Get WFA (Work From Anywhere) recommendations
+#       description: |
+#         Mendapatkan rekomendasi tempat untuk bekerja berdasarkan lokasi pengguna.
+#         Menggunakan algoritma Balanced Scoring yang menggabungkan:
+#         - Jenis tempat (50%): Kesesuaian kategori untuk bekerja
+#         - Internet (30%): Ketersediaan WiFi/koneksi internet
+#         - Jarak (20%): Jarak dari lokasi pengguna
+#       tags:
+#         - WFA (Work From Anywhere)
+#       security:
+#         - bearerAuth: []
+#         - cookieAuth: []
+#       parameters:
+#         - name: lat
+#           in: query
+#           required: true
+#           schema:
+#             type: number
+#             minimum: -90
+#             maximum: 90
+#           description: Latitude lokasi pengguna
+#           example: -0.84208
+#         - name: lng
+#           in: query
+#           required: true
+#           schema:
+#             type: number
+#             minimum: -180
+#             maximum: 180
+#           description: Longitude lokasi pengguna
+#           example: 119.89264
+#       responses:
+#         200:
+#           description: Rekomendasi berhasil didapatkan
+#           content:
+#             application/json:
+#               schema:
+#                 type: object
+#                 properties:
+#                   success:
+#                     type: boolean
+#                     example: true
+#                   data:
+#                     type: object
+#                     properties:
+#                       recommendations:
+#                         type: array
+#                         items:
+#                           type: object
+#                           properties:
+#                             name:
+#                               type: string
+#                               description: Nama tempat
+#                               example: "Kopi Kebangsaan Cafe"
+#                             address:
+#                               type: string
+#                               description: Alamat lengkap
+#                               example: "Jalan Diponegoro No. 15, Palu, Central Sulawesi"
+#                             latitude:
+#                               type: number
+#                               description: Koordinat latitude
+#                               example: -0.8421
+#                             longitude:
+#                               type: number
+#                               description: Koordinat longitude
+#                               example: 119.8926
+#                             suitability_score:
+#                               type: number
+#                               minimum: 0
+#                               maximum: 100
+#                               description: Skor kesesuaian (0-100)
+#                               example: 87.5
+#                             suitability_label:
+#                               type: string
+#                               enum: ["Sangat Direkomendasikan", "Baik", "Cukup", "Kurang Sesuai", "Tidak Direkomendasikan"]
+#                               description: Label kategori kesesuaian
+#                               example: "Sangat Direkomendasikan"
+#                             category:
+#                               type: string
+#                               enum: ["cafe", "coworking", "library", "hotel", "restaurant", "other"]
+#                               description: Kategori tempat
+#                               example: "cafe"
+#                             distance_from_center:
+#                               type: integer
+#                               minimum: 0
+#                               description: Jarak dari user dalam meter
+#                               example: 250
+#                             score_details:
+#                               type: object
+#                               description: Detail breakdown scoring untuk debugging
+#                               properties:
+#                                 final_score:
+#                                   type: number
+#                                   example: 87.5
+#                                 component_scores:
+#                                   type: object
+#                                   properties:
+#                                     type_score:
+#                                       type: integer
+#                                       example: 100
+#                                     internet_score:
+#                                       type: integer
+#                                       example: 75
+#                                     distance_score:
+#                                       type: integer
+#                                       example: 95
+#                                     raw_score:
+#                                       type: number
+#                                       example: 87.5
+#                                     fuzzy_enhancement:
+#                                       type: number
+#                                       example: 1.05
+#                                 evaluations:
+#                                   type: object
+#                                   properties:
+#                                     type:
+#                                       type: string
+#                                       example: "cafe"
+#                                     internet:
+#                                       type: string
+#                                       example: "assumed_wifi"
+#                                     distance:
+#                                       type: string
+#                                       example: "very_close"
+#                                 weights_used:
+#                                   type: object
+#                                   properties:
+#                                     type:
+#                                       type: number
+#                                       example: 0.5
+#                                     internet:
+#                                       type: number
+#                                       example: 0.3
+#                                     distance:
+#                                       type: number
+#                                       example: 0.2
+#                       search_criteria:
+#                         type: object
+#                         properties:
+#                           center_latitude:
+#                             type: number
+#                             example: -0.84208
+#                           center_longitude:
+#                             type: number
+#                             example: 119.89264
+#                           search_radius_meters:
+#                             type: integer
+#                             example: 5000
+#                           categories_searched:
+#                             type: array
+#                             items:
+#                               type: string
+#                             example: ["office.coworking", "education.library", "catering.cafe", "accommodation.hotel"]
+#                           total_candidates_found:
+#                             type: integer
+#                             example: 15
+#                           recommendations_returned:
+#                             type: integer
+#                             example: 10
+#                       fuzzy_ahp_methodology:
+#                         type: object
+#                         properties:
+#                           approach:
+#                             type: string
+#                             example: "Balanced Scoring - Realistic and Forgiving Algorithm"
+#                           weights_used:
+#                             type: object
+#                             properties:
+#                               type:
+#                                 type: number
+#                                 example: 0.5
+#                               internet:
+#                                 type: number
+#                                 example: 0.3
+#                               distance:
+#                                 type: number
+#                                 example: 0.2
+#                           scoring_ranges:
+#                             type: object
+#                             properties:
+#                               type:
+#                                 type: string
+#                                 example: "30-100 (based on place category)"
+#                               internet:
+#                                 type: string
+#                                 example: "30-100 (based on availability and place type)"
+#                               distance:
+#                                 type: string
+#                                 example: "20-100 (gradual decrease with distance)"
+#                   message:
+#                     type: string
+#                     example: "Rekomendasi WFA berhasil diambil menggunakan Balanced Scoring Algorithm"
+#         400:
+#           description: Bad Request - Parameter tidak valid
+#           content:
+#             application/json:
+#               schema:
+#                 type: object
+#                 properties:
+#                   success:
+#                     type: boolean
+#                     example: false
+#                   code:
+#                     type: string
+#                     enum: ["E_VALIDATION"]
+#                     example: "E_VALIDATION"
+#                   message:
+#                     type: string
+#                     examples:
+#                       missing_params:
+#                         value: "Parameter lat dan lng wajib diisi"
+#                       invalid_format:
+#                         value: "Format koordinat tidak valid"
+#                       out_of_range:
+#                         value: "Latitude harus antara -90 dan 90"
+#         401:
+#           description: Unauthorized - Token tidak valid
+#           content:
+#             application/json:
+#               schema:
+#                 type: object
+#                 properties:
+#                   success:
+#                     type: boolean
+#                     example: false
+#                   code:
+#                     type: string
+#                     example: "E_UNAUTHORIZED"
+#                   message:
+#                     type: string
+#                     example: "Token tidak valid atau sudah kedaluwarsa"
+#         408:
+#           description: Request Timeout
+#           content:
+#             application/json:
+#               schema:
+#                 type: object
+#                 properties:
+#                   success:
+#                     type: boolean
+#                     example: false
+#                   code:
+#                     type: string
+#                     example: "E_TIMEOUT"
+#                   message:
+#                     type: string
+#                     example: "Request timeout - Layanan Geoapify membutuhkan waktu terlalu lama untuk merespons. Silakan coba lagi."
+#         429:
+#           description: Too Many Requests
+#           content:
+#             application/json:
+#               schema:
+#                 type: object
+#                 properties:
+#                   success:
+#                     type: boolean
+#                     example: false
+#                   code:
+#                     type: string
+#                     example: "E_RATE_LIMIT"
+#                   message:
+#                     type: string
+#                     example: "Terlalu banyak permintaan ke API Geoapify, coba lagi dalam beberapa menit"
+#         500:
+#           description: Internal Server Error
+#           content:
+#             application/json:
+#               schema:
+#                 type: object
+#                 properties:
+#                   success:
+#                     type: boolean
+#                     example: false
+#                   code:
+#                     type: string
+#                     enum: ["E_CONFIG", "E_API_KEY"]
+#                     example: "E_CONFIG"
+#                   message:
+#                     type: string
+#                     examples:
+#                       config_error:
+#                         value: "API key Geoapify tidak ditemukan"
+#                       api_key_error:
+#                         value: "API key Geoapify tidak valid atau tidak memiliki akses"
+#         503:
+#           description: Service Unavailable
+#           content:
+#             application/json:
+#               schema:
+#                 type: object
+#                 properties:
+#                   success:
+#                     type: boolean
+#                     example: false
+#                   code:
+#                     type: string
+#                     enum: ["E_SERVICE_UNAVAILABLE", "E_EXTERNAL_SERVER"]
+#                     example: "E_SERVICE_UNAVAILABLE"
+#                   message:
+#                     type: string
+#                     examples:
+#                       service_unavailable:
+#                         value: "Layanan Geoapify sedang tidak tersedia"
+#                       external_server:
+#                         value: "Server Geoapify mengalami masalah internal"
+#   /api/wfa/ahp-config:
+#     get:
+#       summary: Get AHP configuration for WFA recommendations
+#       description: Mendapatkan konfigurasi algoritma dan bobot kriteria yang digunakan
+#       tags:
+#         - WFA (Work From Anywhere)
+#       security:
+#         - bearerAuth: []
+#         - cookieAuth: []
+#       responses:
+#         200:
+#           description: Konfigurasi berhasil didapatkan
+#           content:
+#             application/json:
+#               schema:
+#                 type: object
+#                 properties:
+#                   success:
+#                     type: boolean
+#                     example: true
+#                   data:
+#                     type: object
+#                     properties:
+#                       current_weights:
+#                         type: object
+#                         properties:
+#                           type:
+#                             type: number
+#                             example: 0.5
+#                           internet:
+#                             type: number
+#                             example: 0.3
+#                           distance:
+#                             type: number
+#                             example: 0.2
+#                       method:
+#                         type: string
+#                         example: "Balanced Scoring Algorithm"
+#                       criteria_explanation:
+#                         type: object
+#                         properties:
+#                           type:
+#                             type: string
+#                             example: "Kesesuaian jenis tempat untuk bekerja"
+#                           internet:
+#                             type: string
+#                             example: "Ketersediaan akses internet/WiFi"
+#                           distance:
+#                             type: string
+#                             example: "Jarak dari lokasi pengguna"
+#                   message:
+#                     type: string
+#                     example: "Konfigurasi berhasil diambil"
+#   /api/attendance/location-event:
+#     post:
+#       summary: Log location event (ENTER/EXIT) during active work session
+#       description: |
+#         Mencatat event lokasi (masuk/keluar) selama sesi kerja aktif.
+
+#         **Enhanced Validation (July 2, 2025):**
+#         - Hanya dapat mencatat event jika user sedang dalam sesi kerja aktif (checked-in tapi belum check-out)
+#         - Request body disederhanakan tanpa latitude/longitude
+#         - Validasi timezone menggunakan Asia/Jakarta
+#         - Validasi timestamp dalam rentang ±24 jam dari waktu saat ini
+
+#         **Business Rules:**
+#         - User harus sudah check-in pada tanggal event_timestamp
+#         - User belum boleh check-out pada tanggal event_timestamp
+#         - Location ID harus valid dan ada di database
+#       tags:
+#         - Attendance
+#       security:
+#         - bearerAuth: []
+#         - cookieAuth: []
+#       requestBody:
+#         required: true
+#         content:
+#           application/json:
+#             schema:
+#               type: object
+#               required:
+#                 - event_type
+#                 - location_id
+#                 - event_timestamp
+#               properties:
+#                 event_type:
+#                   type: string
+#                   enum: ["ENTER", "EXIT"]
+#                   description: Jenis event lokasi
+#                   example: "ENTER"
+#                 location_id:
+#                   type: integer
+#                   minimum: 1
+#                   description: ID lokasi yang valid dari database
+#                   example: 1
+#                 event_timestamp:
+#                   type: string
+#                   format: date-time
+#                   description: |
+#                     Timestamp event dalam format ISO 8601.
+#                     Harus dalam rentang ±24 jam dari waktu saat ini.
+#                   example: "2025-07-02T14:30:00+07:00"
+#       responses:
+#         201:
+#           description: Location event berhasil dicatat
+#           content:
+#             application/json:
+#               schema:
+#                 type: object
+#                 properties:
+#                   success:
+#                     type: boolean
+#                     example: true
+#                   message:
+#                     type: string
+#                     example: "Location event berhasil dicatat"
+#                   data:
+#                     type: object
+#                     properties:
+#                       event_id:
+#                         type: integer
+#                         description: ID event yang baru dibuat
+#                         example: 123
+#                       user_id:
+#                         type: integer
+#                         description: ID user yang mencatat event
+#                         example: 1
+#                       location_id:
+#                         type: integer
+#                         description: ID lokasi
+#                         example: 1
+#                       event_type:
+#                         type: string
+#                         enum: ["ENTER", "EXIT"]
+#                         example: "ENTER"
+#                       event_timestamp:
+#                         type: string
+#                         format: date-time
+#                         description: Timestamp event yang dicatat
+#                         example: "2025-07-02T14:30:00.000Z"
+#                       recorded_at:
+#                         type: string
+#                         format: date-time
+#                         description: Timestamp saat event dicatat ke database
+#                         example: "2025-07-02T14:30:15.000Z"
+#         400:
+#           description: Bad Request - Validasi gagal atau tidak ada sesi aktif
+#           content:
+#             application/json:
+#               schema:
+#                 oneOf:
+#                   - type: object
+#                     description: No Active Session
+#                     properties:
+#                       success:
+#                         type: boolean
+#                         example: false
+#                       message:
+#                         type: string
+#                         example: "Tidak dapat mencatat lokasi event: Anda belum melakukan check-in pada tanggal tersebut"
+#                       error:
+#                         type: string
+#                         example: "NO_ACTIVE_SESSION"
+#                   - type: object
+#                     description: Session Already Ended
+#                     properties:
+#                       success:
+#                         type: boolean
+#                         example: false
+#                       message:
+#                         type: string
+#                         example: "Tidak dapat mencatat lokasi event: Anda sudah melakukan check-out pada tanggal tersebut"
+#                       error:
+#                         type: string
+#                         example: "SESSION_ALREADY_ENDED"
+#                   - type: object
+#                     description: Invalid Location
+#                     properties:
+#                       success:
+#                         type: boolean
+#                         example: false
+#                       message:
+#                         type: string
+#                         example: "Location ID tidak valid"
+#                       error:
+#                         type: string
+#                         example: "INVALID_LOCATION_ID"
+#                   - type: object
+#                     description: Validation Error
+#                     properties:
+#                       success:
+#                         type: boolean
+#                         example: false
+#                       code:
+#                         type: string
+#                         example: "E_VALIDATION"
+#                       message:
+#                         type: string
+#                         example: "Event timestamp harus dalam rentang 24 jam dari waktu saat ini"
+#                       errors:
+#                         type: array
+#                         items:
+#                           type: object
+#                           properties:
+#                             type:
+#                               type: string
+#                               example: "field"
+#                             value:
+#                               type: string
+#                               example: "2025-07-03T10:00:00.000Z"
+#                             msg:
+#                               type: string
+#                               example: "Event timestamp harus dalam rentang 24 jam dari waktu saat ini"
+#                             path:
+#                               type: string
+#                               example: "event_timestamp"
+#                             location:
+#                               type: string
+#                               example: "body"
+#         401:
+#           description: Unauthorized - Token tidak valid
+#           content:
+#             application/json:
+#               schema:
+#                 type: object
+#                 properties:
+#                   message:
+#                     type: string
+#                     example: "No token provided"
+#         500:
+#           description: Internal Server Error
+#           content:
+#             application/json:
+#               schema:
+#                 type: object
+#                 properties:
+#                   success:
+#                     type: boolean
+#                     example: false
+#                   message:
+#                     type: string
+#                     example: "Terjadi kesalahan pada server"
+# components:
+#   securitySchemes:
+#     cookieAuth:
+#       type: apiKey
+#       in: cookie
+#       name: token
+#       description: JWT token in HttpOnly cookie
+#     bearerAuth:
+#       type: http
+#       scheme: bearer
+#       bearerFormat: JWT
+#       description: JWT token in Authorization header
+
+# # Location Event API Implementation Examples
+
+# ## JavaScript/TypeScript Example
+
+# ```javascript
+# // Location Event Logger Class
+# class LocationEventLogger {
+#   constructor(apiBaseUrl, authToken) {
+#     this.apiBaseUrl = apiBaseUrl;
+#     this.authToken = authToken;
+#   }
+
+#   async logLocationEvent(eventType, locationId, eventTimestamp = null) {
+#     try {
+#       // Use current time if no timestamp provided
+#       const timestamp = eventTimestamp || new Date().toISOString();
+
+#       const response = await fetch(`${this.apiBaseUrl}/api/attendance/location-event`, {
+#         method: 'POST',
+#         headers: {
+#           'Content-Type': 'application/json',
+#           'Authorization': `Bearer ${this.authToken}`
+#         },
+#         body: JSON.stringify({
+#           event_type: eventType,
+#           location_id: locationId,
+#           event_timestamp: timestamp
+#         })
+#       });
+
+#       const result = await response.json();
+
+#       if (!response.ok) {
+#         throw new Error(result.message || 'Failed to log location event');
+#       }
+
+#       return result;
+#     } catch (error) {
+#       console.error('Location event logging failed:', error);
+#       throw error;
+#     }
+#   }
+
+#   // Handle different error scenarios
+#   handleLocationEventError(error) {
+#     if (error.response) {
+#       const { error: errorCode, message } = error.response.data;
+
+#       switch (errorCode) {
+#         case 'NO_ACTIVE_SESSION':
+#           return 'Anda belum check-in hari ini. Silakan check-in terlebih dahulu.';
+#         case 'SESSION_ALREADY_ENDED':
+#           return 'Anda sudah check-out hari ini. Event lokasi tidak dapat dicatat.';
+#         case 'INVALID_LOCATION_ID':
+#           return 'Lokasi tidak valid. Silakan pilih lokasi yang benar.';
+#         default:
+#           return message || 'Terjadi kesalahan saat mencatat event lokasi.';
+#       }
+#     }
+#     return 'Koneksi bermasalah. Silakan coba lagi.';
+#   }
+# }
+
+# // Usage Example
+# const logger = new LocationEventLogger('https://api.infinitetrack.com', userToken);
+
+# // Log ENTER event
+# try {
+#   const result = await logger.logLocationEvent('ENTER', 1);
+#   console.log('Event logged successfully:', result.data);
+# } catch (error) {
+#   const userMessage = logger.handleLocationEventError(error);
+#   alert(userMessage);
+# }
+# ```
+
+# ## React Hook Example
+
+# ```javascript
+# import { useState, useCallback } from 'react';
+
+# const useLocationEventLogger = (apiBaseUrl, authToken) => {
+#   const [isLogging, setIsLogging] = useState(false);
+#   const [lastEvent, setLastEvent] = useState(null);
+#   const [error, setError] = useState(null);
+
+#   const logEvent = useCallback(async (eventType, locationId) => {
+#     setIsLogging(true);
+#     setError(null);
+
+#     try {
+#       const response = await fetch(`${apiBaseUrl}/api/attendance/location-event`, {
+#         method: 'POST',
+#         headers: {
+#           'Content-Type': 'application/json',
+#           'Authorization': `Bearer ${authToken}`
+#         },
+#         body: JSON.stringify({
+#           event_type: eventType,
+#           location_id: locationId,
+#           event_timestamp: new Date().toISOString()
+#         })
+#       });
+
+#       const result = await response.json();
+
+#       if (!response.ok) {
+#         throw new Error(result.message || 'Failed to log event');
+#       }
+
+#       setLastEvent(result.data);
+#       return result.data;
+#     } catch (err) {
+#       setError(err.message);
+#       throw err;
+#     } finally {
+#       setIsLogging(false);
+#     }
+#   }, [apiBaseUrl, authToken]);
+
+#   return {
+#     logEvent,
+#     isLogging,
+#     lastEvent,
+#     error,
+#     clearError: () => setError(null)
+#   };
+# };
+
+# export default useLocationEventLogger;
+# ```

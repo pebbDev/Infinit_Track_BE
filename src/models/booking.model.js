@@ -58,6 +58,14 @@ const Booking = sequelize.define(
       type: DataTypes.DATE,
       allowNull: true
     },
+    suitability_score: {
+      type: DataTypes.DECIMAL(5, 2),
+      allowNull: true
+    },
+    suitability_label: {
+      type: DataTypes.STRING(50),
+      allowNull: true
+    },
     rejection_reason: {
       type: DataTypes.INTEGER,
       allowNull: true

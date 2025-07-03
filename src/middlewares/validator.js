@@ -510,11 +510,11 @@ export const locationEventValidation = [
       // Use Jakarta time for validation
       const eventTimeJakarta = new Date(eventTime.getTime() + jakartaOffset);
 
-      // Check if event is more than 2 hours in the future (increased tolerance for timezone issues)
-      const twoHoursFromNow = new Date(jakartaNow.getTime() + 2 * 60 * 60 * 1000);
+      // Check if event is more than 24 hours in the future
+      const twentyFourHoursFromNow = new Date(jakartaNow.getTime() + 24 * 60 * 60 * 1000);
 
-      if (eventTimeJakarta > twoHoursFromNow) {
-        throw new Error('Event timestamp tidak boleh lebih dari 2 jam ke depan');
+      if (eventTimeJakarta > twentyFourHoursFromNow) {
+        throw new Error('Event timestamp tidak boleh lebih dari 24 jam ke depan');
       }
 
       // Check if event is more than 24 hours in the past
