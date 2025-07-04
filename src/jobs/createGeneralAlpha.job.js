@@ -13,16 +13,26 @@ const createGeneralAlphaRecords = async () => {
   try {
     logger.info('Starting create general alpha records job...');
 
-    // Get current Jakarta time for today's date
+    // Get current Jakarta time for today's date - FIXED TIMEZONE
     const now = new Date();
-    const jakartaOffset = 7 * 60; // UTC+7 in minutes
-    const jakartaTime = new Date(now.getTime() + jakartaOffset * 60000);
+
+    // Use proper timezone conversion instead of manual offset
+    const jakartaTimeString = now.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' });
+    const jakartaTime = new Date(jakartaTimeString);
     const todayDate = jakartaTime.toISOString().split('T')[0]; // YYYY-MM-DD format
+
+    logger.info(
+      `Timezone debug - UTC: ${now.toISOString()}, Jakarta: ${jakartaTime.toISOString()}, Date: ${todayDate}`
+    );
 
     // Initialize Indonesian holidays checker
     const hd = new Holidays('ID'); // Indonesia
     const isHoliday = hd.isHoliday(jakartaTime);
     const dayOfWeek = jakartaTime.getDay(); // 0 = Sunday, 6 = Saturday
+
+    logger.info(
+      `Day check - Day of week: ${dayOfWeek} (${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dayOfWeek]}), Is holiday: ${isHoliday}`
+    );
 
     // Check if today is a working day (Monday-Friday and not a holiday)
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
@@ -119,7 +129,7 @@ const createGeneralAlphaRecords = async () => {
             user_id: userId,
             attendance_date: todayDate,
             status_id: 3, // Alpha status
-            category_id: 4, // Alpha category
+            category_id: 1, // Work From Office (default for alpha)
             location_id: null,
             booking_id: null,
             time_in: jakartaTime,
