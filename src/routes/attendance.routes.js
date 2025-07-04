@@ -19,7 +19,8 @@ import {
   logLocationEvent,
   getSmartCheckoutPrediction,
   getSmartEngineConfig,
-  getEnhancedAutoCheckoutSettings
+  getEnhancedAutoCheckoutSettings,
+  testTimezone
 } from '../controllers/attendance.controller.js';
 import { verifyToken } from '../middlewares/authJwt.js';
 import roleGuard from '../middlewares/roleGuard.js';
@@ -31,6 +32,9 @@ import {
 } from '../middlewares/validator.js';
 
 const router = express.Router();
+
+// Timezone test endpoint (untuk debugging timezone fix) - NO AUTH untuk testing
+router.get('/test-timezone', testTimezone);
 
 // All attendance routes require authentication
 router.use(verifyToken);
@@ -90,5 +94,8 @@ router.get(
   roleGuard(['Admin', 'Management']),
   getEnhancedAutoCheckoutSettings
 );
+
+// Timezone test endpoint (untuk debugging timezone fix)
+router.get('/test-timezone', testTimezone);
 
 export default router;

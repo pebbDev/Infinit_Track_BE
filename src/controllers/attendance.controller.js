@@ -14,7 +14,12 @@ import {
   Role,
   LocationEvent
 } from '../models/index.js';
-import { calculateDistance } from '../utils/geofence.js';
+import {
+  calculateDistance,
+  getJakartaTime,
+  getJakartaDateString,
+  getCurrentTimeForDB
+} from '../utils/geofence.js';
 import { formatWorkHour, calculateWorkHour, formatTimeOnly } from '../utils/workHourFormatter.js';
 import { applySearch } from '../utils/searchHelper.js';
 import { triggerAutoCheckout } from '../jobs/autoCheckout.job.js';
@@ -313,11 +318,10 @@ export const checkIn = async (req, res, next) => {
     const { category_id, latitude, longitude, notes = '', booking_id } = req.body;
 
     // Definisikan "Hari Ini" dengan timezone Asia/Jakarta yang benar
-    const now = new Date();
-    // Gunakan toLocaleString untuk mendapatkan waktu Jakarta yang akurat
-    const jakartaTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
-    const localTime = jakartaTime; // Waktu sekarang dalam timezone Jakarta
-    const todayDate = jakartaTime.toISOString().split('T')[0]; // YYYY-MM-DD format
+    // FIXED V2: Gunakan UTC untuk database, Jakarta time untuk logika
+    const jakartaTime = getJakartaTime();
+    const localTime = new Date(); // UTC time for database
+    const todayDate = getJakartaDateString(); // YYYY-MM-DD format
 
     // 1. First Layer Validation - Check Duplication
     const existingAttendance = await Attendance.findOne({
@@ -575,17 +579,20 @@ export const checkIn = async (req, res, next) => {
     }
 
     // 7. Save Data to Database dengan status yang telah ditentukan secara dinamis
+    // FIXED: Always use WIB time for database storage
+    const wibTimeForDB = getCurrentTimeForDB(); // Force WIB timezone
+
     const attendanceData = {
       user_id: userId,
       category_id: category_id,
       status_id: determinedStatusId, // <-- GUNAKAN VARIABEL HASIL LOGIKA DINAMIS
       location_id: validatedLocationId, // This will contain actual location_id for WFO
       booking_id: validatedBookingId,
-      time_in: localTime,
+      time_in: wibTimeForDB, // SAVE WIB TIME
       attendance_date: todayDate,
       notes: notes,
-      created_at: localTime,
-      updated_at: localTime
+      created_at: wibTimeForDB, // SAVE WIB TIME
+      updated_at: wibTimeForDB // SAVE WIB TIME
     };
 
     const newAttendance = await Attendance.create(attendanceData, { transaction });
@@ -879,7 +886,7 @@ export const getAttendanceStatus = async (req, res, next) => {
         today_date: todayDate,
         is_holiday: isHolidayOrWeekend,
         holiday_checkin_enabled: holidayCheckinEnabled,
-        current_time: localTime.toISOString(),
+        current_time: getJakartaTime().toISOString(),
         checkin_window: {
           start_time: checkinStartTime,
           end_time: checkinEndTime
@@ -1013,13 +1020,33 @@ export const checkOut = async (req, res, next) => {
         message: 'Anda berada di luar radius lokasi yang diizinkan untuk check-out.'
       });
     } // 4. Update Database
-    const now = new Date();
-    // Gunakan timezone Jakarta yang benar
-    const timeOut = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
-    const timeIn = new Date(attendance.time_in);
+    // FIXED V4: Simple timezone-consistent calculation
+    const timeOut = getCurrentTimeForDB(); // UTC time
 
-    // Hitung work_hour menggunakan utility function
-    const workHour = calculateWorkHour(timeIn, timeOut);
+    // FIXED V5: Super simple approach - direct milliseconds calculation
+    // Get raw time strings and calculate difference directly
+    const timeInString = attendance.time_in; // e.g., "2025-07-04 14:35:00"
+
+    // Convert timeOut to same format for consistent parsing
+    const timeOutFormatted = timeOut.toISOString().slice(0, 19).replace('T', ' ');
+
+    // Parse both as local time and get milliseconds
+    const timeInMs = new Date(timeInString).getTime();
+    const timeOutMs = new Date(timeOutFormatted).getTime();
+
+    // Calculate difference in hours, ensure non-negative
+    const diffMs = timeOutMs - timeInMs;
+    const workHour = Math.max(0, Math.round((diffMs / (1000 * 60 * 60)) * 100) / 100);
+
+    // DEBUG: Log the values before calculation
+    console.log('=== WORK HOUR CALCULATION DEBUG V5 ===');
+    console.log('timeInString:', timeInString);
+    console.log('timeOutFormatted:', timeOutFormatted);
+    console.log('timeInMs:', timeInMs);
+    console.log('timeOutMs:', timeOutMs);
+    console.log('diffMs:', diffMs);
+    console.log('diffHours:', diffMs / (1000 * 60 * 60));
+    console.log('Final workHour:', workHour);
 
     // Update attendance record
     await attendance.update(
@@ -1032,21 +1059,31 @@ export const checkOut = async (req, res, next) => {
 
     await transaction.commit();
 
+    // Fetch fresh data from database to ensure updated values
+    const updatedAttendance = await Attendance.findByPk(attendanceId);
+
+    // Debug logging
+    console.log('=== CHECKOUT DEBUG ===');
+    console.log('Raw time_in from DB:', updatedAttendance.time_in);
+    console.log('Raw time_out from DB:', updatedAttendance.time_out);
+    console.log('formatTimeOnly(time_in):', formatTimeOnly(updatedAttendance.time_in));
+    console.log('formatTimeOnly(time_out):', formatTimeOnly(updatedAttendance.time_out));
+
     // 5. Kirim Respons Sukses
     res.status(200).json({
       success: true,
       data: {
-        id_attendance: attendance.id_attendance,
-        attendance_date: attendance.attendance_date,
-        time_in: formatTimeOnly(attendance.time_in),
-        time_out: formatTimeOnly(attendance.time_out),
-        work_hour: formatWorkHour(attendance.work_hour),
-        user_id: attendance.user_id,
-        category_id: attendance.category_id,
-        status_id: attendance.status_id,
-        location_id: attendance.location_id,
-        booking_id: attendance.booking_id,
-        notes: attendance.notes
+        id_attendance: updatedAttendance.id_attendance,
+        attendance_date: updatedAttendance.attendance_date,
+        time_in: formatTimeOnly(updatedAttendance.time_in),
+        time_out: formatTimeOnly(updatedAttendance.time_out),
+        work_hour: formatWorkHour(updatedAttendance.work_hour),
+        user_id: updatedAttendance.user_id,
+        category_id: updatedAttendance.category_id,
+        status_id: updatedAttendance.status_id,
+        location_id: updatedAttendance.location_id,
+        booking_id: updatedAttendance.booking_id,
+        notes: updatedAttendance.notes
       },
       message: 'Check-out berhasil'
     });
@@ -2147,5 +2184,52 @@ export const getEnhancedAutoCheckoutSettings = async (req, res, next) => {
   } catch (error) {
     logger.error('Error getting enhanced auto checkout settings:', error);
     next(error);
+  }
+};
+
+/**
+ * Test endpoint untuk verifikasi timezone fix
+ * Debug endpoint untuk memastikan timezone Jakarta bekerja dengan benar
+ */
+export const testTimezone = async (req, res) => {
+  try {
+    const now = new Date(); // UTC time
+    const jakartaTime = getJakartaTime();
+
+    // Simulasi check-in/out menggunakan UTC time (seperti yang disimpan di database)
+    const sampleCheckInUTC = now; // UTC time for database
+    const sampleCheckOutUTC = new Date(now.getTime() + 65 * 60 * 1000); // +65 minutes
+
+    res.json({
+      success: true,
+      message: 'Timezone test results - DEBUGGING UTC to Jakarta conversion',
+      data: {
+        server_utc_time: now.toISOString(),
+        jakarta_time_calculated: jakartaTime.toISOString(),
+        jakarta_date_string: getJakartaDateString(),
+        current_jakarta_time_formatted: formatTimeOnly(now), // Format UTC time to Jakarta
+        simulation: {
+          check_in_time: sampleCheckInUTC.toISOString(), // What gets saved to DB (UTC)
+          check_in_formatted: formatTimeOnly(sampleCheckInUTC), // How it gets displayed (Jakarta)
+          check_out_time: sampleCheckOutUTC.toISOString(),
+          check_out_formatted: formatTimeOnly(sampleCheckOutUTC),
+          work_hour_calculated: calculateWorkHour(sampleCheckInUTC, sampleCheckOutUTC),
+          work_hour_formatted: formatWorkHour(
+            calculateWorkHour(sampleCheckInUTC, sampleCheckOutUTC)
+          )
+        },
+        timezone_info: {
+          jakarta_offset: '+07:00',
+          timezone_method: 'UTC storage + Jakarta display conversion',
+          current_fix: 'formatTimeOnly now converts UTC to Jakarta timezone using toLocaleString'
+        }
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error testing timezone',
+      error: error.message
+    });
   }
 };

@@ -119,13 +119,13 @@ const createGeneralAlphaRecords = async () => {
             user_id: userId,
             attendance_date: todayDate,
             status_id: 3, // Alpha status
-            category_id: 1, // Default to WFO
+            category_id: 4, // Alpha category
             location_id: null,
             booking_id: null,
-            time_in: null,
-            time_out: null,
+            time_in: jakartaTime,
+            time_out: jakartaTime,
             work_hour: 0,
-            notes: 'Tidak ada data check-in terdeteksi oleh sistem.',
+            notes: 'System-generated record: User did not check-in.',
             created_at: jakartaTime,
             updated_at: jakartaTime
           });

@@ -60,8 +60,7 @@ const Attendance = sequelize.define(
     },
     work_hour: {
       type: DataTypes.FLOAT(5, 2),
-      allowNull: false,
-      defaultValue: 0
+      allowNull: true
     },
     attendance_date: {
       type: DataTypes.DATEONLY,
