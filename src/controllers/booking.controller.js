@@ -565,3 +565,174 @@ export const deleteBooking = async (req, res, next) => {
     next(error);
   }
 };
+
+// NEW ENDPOINT: Get booking history for authenticated user
+export const getBookingHistory = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const {
+      status,
+      page = 1,
+      limit = 10,
+      sort_by = 'created_at',
+      sort_order = 'DESC'
+    } = req.query;
+
+    // Validate pagination parameters
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    if (pageNum < 1 || limitNum < 1 || limitNum > 100) {
+      return res.status(400).json({
+        success: false,
+        message: 'Parameter pagination tidak valid. Page >= 1, limit antara 1-100.'
+      });
+    }
+
+    const offset = (pageNum - 1) * limitNum;
+
+    // Build where clause with status filter
+    const whereClause = { user_id: userId };
+    if (status) {
+      const statusMap = {
+        approved: 1,
+        rejected: 2,
+        pending: 3
+      };
+
+      if (!statusMap[status]) {
+        return res.status(400).json({
+          success: false,
+          message: 'Status filter tidak valid. Pilihan: approved, rejected, pending.'
+        });
+      }
+
+      whereClause.status = statusMap[status];
+    }
+
+    // Validate sorting parameters
+    const validSortFields = ['created_at', 'schedule_date', 'processed_at', 'status'];
+    const validSortOrders = ['ASC', 'DESC'];
+
+    if (!validSortFields.includes(sort_by)) {
+      return res.status(400).json({
+        success: false,
+        message: `Sort field tidak valid. Pilihan: ${validSortFields.join(', ')}.`
+      });
+    }
+
+    if (!validSortOrders.includes(sort_order.toUpperCase())) {
+      return res.status(400).json({
+        success: false,
+        message: 'Sort order harus ASC atau DESC.'
+      });
+    }
+
+    // Build order clause
+    let orderClause;
+    if (sort_by === 'status') {
+      // Custom status ordering: pending (3), approved (1), rejected (2)
+      orderClause = [
+        [sequelize.fn('FIELD', sequelize.col('status'), 3, 1, 2), sort_order.toUpperCase()],
+        ['created_at', 'DESC'] // Secondary sort
+      ];
+    } else {
+      orderClause = [[sort_by, sort_order.toUpperCase()]];
+    }
+
+    // Query bookings with full relations
+    const bookings = await Booking.findAndCountAll({
+      where: whereClause,
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id_users', 'full_name', 'email', 'nip_nim'],
+          include: [
+            {
+              model: Position,
+              as: 'position',
+              attributes: ['position_name']
+            },
+            {
+              model: Role,
+              as: 'role',
+              attributes: ['id_roles', 'role_name']
+            }
+          ]
+        },
+        {
+          model: Location,
+          as: 'location',
+          attributes: ['location_id', 'latitude', 'longitude', 'radius', 'description']
+        },
+        {
+          model: BookingStatus,
+          as: 'booking_status',
+          attributes: ['name_status']
+        }
+      ],
+      order: orderClause,
+      limit: limitNum,
+      offset: offset,
+      distinct: true
+    });
+
+    // Transform data with consistent structure
+    const transformedBookings = bookings.rows.map((booking) => ({
+      booking_id: booking.booking_id,
+      user_id: booking.user.id_users,
+      user_full_name: booking.user.full_name,
+      user_email: booking.user.email,
+      user_nip_nim: booking.user.nip_nim,
+      user_position_name: booking.user.position ? booking.user.position.position_name : null,
+      user_role_name: booking.user.role ? booking.user.role.role_name : null,
+      schedule_date: booking.schedule_date,
+      status: booking.booking_status.name_status,
+      location: {
+        location_id: booking.location.location_id,
+        latitude: parseFloat(booking.location.latitude),
+        longitude: parseFloat(booking.location.longitude),
+        radius: parseFloat(booking.location.radius),
+        description: booking.location.description
+      },
+      notes: booking.notes,
+      suitability_score: parseFloat(booking.suitability_score) || null,
+      suitability_label: booking.suitability_label,
+      created_at: booking.created_at,
+      processed_at: booking.processed_at,
+      approved_by: booking.approved_by
+    }));
+
+    // Calculate pagination info
+    const totalPages = Math.ceil(bookings.count / limitNum);
+
+    // Log for monitoring
+    logger.info(`Booking history retrieved for user ${userId}: ${bookings.count} total, page ${pageNum}/${totalPages}`);
+
+    // Response with comprehensive data and metadata
+    res.status(200).json({
+      success: true,
+      data: {
+        bookings: transformedBookings,
+        pagination: {
+          current_page: pageNum,
+          total_pages: totalPages,
+          total_items: bookings.count,
+          items_per_page: limitNum,
+          has_next_page: pageNum < totalPages,
+          has_previous_page: pageNum > 1
+        },
+        filters: {
+          status: status || 'all',
+          sort_by: sort_by,
+          sort_order: sort_order.toUpperCase()
+        }
+      },
+      message: `Riwayat booking berhasil diambil. Ditemukan ${bookings.count} booking.`
+    });
+
+  } catch (error) {
+    logger.error(`Error getting booking history for user ${req.user?.id}:`, error);
+    next(error);
+  }
+};

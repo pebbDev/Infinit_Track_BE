@@ -4,7 +4,7 @@ import {
   createBooking,
   updateBookingStatus,
   getAllBookings,
-  getMyBookings,
+  getBookingHistory,
   deleteBooking
 } from '../controllers/booking.controller.js';
 import { verifyToken } from '../middlewares/authJwt.js';
@@ -35,8 +35,8 @@ router.patch(
 // GET /api/bookings - Mendapatkan semua booking (hanya admin dan management)
 router.get('/', roleGuard(['Admin', 'Management']), getAllBookings);
 
-// GET /api/bookings/my - Mendapatkan booking user sendiri
-router.get('/my', getMyBookings);
+// GET /api/bookings/history - Mendapatkan riwayat booking user dengan filter dan sorting
+router.get('/history', getBookingHistory);
 
 // DELETE /api/bookings/:id - Menghapus booking (hanya admin dan management)
 router.delete('/:id', roleGuard(['Admin', 'Management']), deleteBooking);
