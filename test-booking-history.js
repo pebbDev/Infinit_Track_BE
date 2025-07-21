@@ -48,17 +48,17 @@ const testScenarios = [
 async function makeRequest(endpoint, params = {}) {
   try {
     const url = new URL(`${BASE_URL}${endpoint}`);
-    Object.keys(params).forEach(key => {
+    Object.keys(params).forEach((key) => {
       if (params[key] !== undefined) {
         url.searchParams.append(key, params[key]);
       }
     });
 
     console.log(`\n🔍 Testing: ${url.toString()}`);
-    
+
     const response = await axios.get(url.toString(), {
       headers: {
-        'Authorization': `Bearer ${authToken}`,
+        Authorization: `Bearer ${authToken}`,
         'Content-Type': 'application/json'
       }
     });
@@ -91,7 +91,7 @@ async function login() {
 // Test invalid parameters
 async function testInvalidParams() {
   console.log('\n📋 === TESTING INVALID PARAMETERS ===');
-  
+
   const invalidTests = [
     { name: 'Invalid Status', params: { status: 'invalid' } },
     { name: 'Invalid Page (0)', params: { page: 0 } },
@@ -114,12 +114,12 @@ async function testInvalidParams() {
 // Test valid scenarios
 async function testValidScenarios() {
   console.log('\n📋 === TESTING VALID SCENARIOS ===');
-  
+
   for (const scenario of testScenarios) {
     try {
       console.log(`\n✅ Testing: ${scenario.name}`);
       const result = await makeRequest('/api/bookings/history', scenario.params);
-      
+
       // Log key response details
       console.log(`📊 Response Summary:`);
       console.log(`   - Success: ${result.success}`);
@@ -128,13 +128,14 @@ async function testValidScenarios() {
       console.log(`   - Current Page: ${result.data.pagination?.current_page || 1}`);
       console.log(`   - Items Returned: ${result.data.bookings?.length || 0}`);
       console.log(`   - Filters Applied: ${JSON.stringify(result.data.filters || {})}`);
-      
+
       // Sample first booking if exists
       if (result.data.bookings?.length > 0) {
         const firstBooking = result.data.bookings[0];
-        console.log(`   - Sample Booking: ID ${firstBooking.booking_id}, Status: ${firstBooking.status}, Date: ${firstBooking.schedule_date}`);
+        console.log(
+          `   - Sample Booking: ID ${firstBooking.booking_id}, Status: ${firstBooking.status}, Date: ${firstBooking.schedule_date}`
+        );
       }
-      
     } catch (error) {
       console.error(`❌ Test failed for ${scenario.name}:`, error.response?.data || error.message);
     }
@@ -146,7 +147,7 @@ async function runTests() {
   console.log('🚀 Starting Booking History Endpoint Tests');
   console.log(`📍 Base URL: ${BASE_URL}`);
   console.log(`👤 Test User: ${TEST_USER_EMAIL}`);
-  
+
   // Login first
   const loginSuccess = await login();
   if (!loginSuccess) {
@@ -157,17 +158,16 @@ async function runTests() {
   try {
     // Test valid scenarios
     await testValidScenarios();
-    
+
     // Test invalid parameters
     await testInvalidParams();
-    
+
     console.log('\n🎉 All tests completed!');
     console.log('\n📝 Summary:');
     console.log('   - New endpoint: GET /api/bookings/history');
     console.log('   - Features: Status filtering, pagination, sorting');
     console.log('   - Authentication: Required (Bearer token)');
     console.log('   - Response: Comprehensive booking data with metadata');
-    
   } catch (error) {
     console.error('❌ Test suite failed:', error.message);
     process.exit(1);
@@ -176,7 +176,7 @@ async function runTests() {
 
 // Handle script execution
 if (import.meta.url === `file://${process.argv[1]}`) {
-  runTests().catch(error => {
+  runTests().catch((error) => {
     console.error('💥 Test script crashed:', error);
     process.exit(1);
   });

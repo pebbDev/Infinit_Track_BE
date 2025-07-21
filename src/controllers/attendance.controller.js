@@ -1020,33 +1020,32 @@ export const checkOut = async (req, res, next) => {
         message: 'Anda berada di luar radius lokasi yang diizinkan untuk check-out.'
       });
     } // 4. Update Database
-    // FIXED V4: Simple timezone-consistent calculation
+    // FIXED V7: Ensure timezone consistency for work hour calculation
     const timeOut = getCurrentTimeForDB(); // UTC time
 
-    // FIXED V5: Super simple approach - direct milliseconds calculation
-    // Get raw time strings and calculate difference directly
-    const timeInString = attendance.time_in; // e.g., "2025-07-04 14:35:00"
+    // CRITICAL FIX: Ensure both timeIn and timeOut are in the same timezone format
+    // attendance.time_in from database is a string like "2025-07-08 21:54:24"
+    // We need to parse it correctly as WIB timezone
+    let timeInForCalculation;
 
-    // Convert timeOut to same format for consistent parsing
-    const timeOutFormatted = timeOut.toISOString().slice(0, 19).replace('T', ' ');
+    if (typeof attendance.time_in === 'string') {
+      // Parse database string as WIB timezone (+07:00)
+      timeInForCalculation = new Date(attendance.time_in + '+07:00');
+    } else {
+      // If it's already a Date object, use it directly
+      timeInForCalculation = new Date(attendance.time_in);
+    }
 
-    // Parse both as local time and get milliseconds
-    const timeInMs = new Date(timeInString).getTime();
-    const timeOutMs = new Date(timeOutFormatted).getTime();
-
-    // Calculate difference in hours, ensure non-negative
-    const diffMs = timeOutMs - timeInMs;
-    const workHour = Math.max(0, Math.round((diffMs / (1000 * 60 * 60)) * 100) / 100);
+    // Use the dedicated calculateWorkHour function from workHourFormatter
+    const workHour = calculateWorkHour(timeInForCalculation, timeOut);
 
     // DEBUG: Log the values before calculation
-    console.log('=== WORK HOUR CALCULATION DEBUG V5 ===');
-    console.log('timeInString:', timeInString);
-    console.log('timeOutFormatted:', timeOutFormatted);
-    console.log('timeInMs:', timeInMs);
-    console.log('timeOutMs:', timeOutMs);
-    console.log('diffMs:', diffMs);
-    console.log('diffHours:', diffMs / (1000 * 60 * 60));
-    console.log('Final workHour:', workHour);
+    console.log('=== WORK HOUR CALCULATION DEBUG V7 ===');
+    console.log('attendance.time_in (raw from DB):', attendance.time_in);
+    console.log('timeInForCalculation (parsed with timezone):', timeInForCalculation);
+    console.log('timeOut (current UTC):', timeOut);
+    console.log('Final workHour calculated:', workHour);
+    console.log('Final workHour formatted:', formatWorkHour(workHour));
 
     // Update attendance record
     await attendance.update(

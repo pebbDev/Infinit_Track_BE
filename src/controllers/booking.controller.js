@@ -34,7 +34,9 @@ async function getSuitabilityScoreForCustomLocation(latitude, longitude) {
       apiKey: geoapifyApiKey
     };
 
-    logger.info(`[DIAGNOSTIC] Calling Geoapify URL: ${apiUrl} with params: ${JSON.stringify(params)}`);
+    logger.info(
+      `[DIAGNOSTIC] Calling Geoapify URL: ${apiUrl} with params: ${JSON.stringify(params)}`
+    );
 
     const response = await axios.get(apiUrl, { params });
 
@@ -570,13 +572,7 @@ export const deleteBooking = async (req, res, next) => {
 export const getBookingHistory = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const {
-      status,
-      page = 1,
-      limit = 10,
-      sort_by = 'created_at',
-      sort_order = 'DESC'
-    } = req.query;
+    const { status, page = 1, limit = 10, sort_by = 'created_at', sort_order = 'DESC' } = req.query;
 
     // Validate pagination parameters
     const pageNum = parseInt(page);
@@ -707,7 +703,9 @@ export const getBookingHistory = async (req, res, next) => {
     const totalPages = Math.ceil(bookings.count / limitNum);
 
     // Log for monitoring
-    logger.info(`Booking history retrieved for user ${userId}: ${bookings.count} total, page ${pageNum}/${totalPages}`);
+    logger.info(
+      `Booking history retrieved for user ${userId}: ${bookings.count} total, page ${pageNum}/${totalPages}`
+    );
 
     // Response with comprehensive data and metadata
     res.status(200).json({
@@ -730,7 +728,6 @@ export const getBookingHistory = async (req, res, next) => {
       },
       message: `Riwayat booking berhasil diambil. Ditemukan ${bookings.count} booking.`
     });
-
   } catch (error) {
     logger.error(`Error getting booking history for user ${req.user?.id}:`, error);
     next(error);

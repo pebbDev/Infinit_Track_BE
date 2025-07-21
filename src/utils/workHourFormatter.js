@@ -66,8 +66,25 @@ export const calculateWorkHour = (timeIn, timeOut) => {
     return 0;
   }
 
-  // Convert to hours and round to 2 decimal places
-  return Math.round((workHourMs / (1000 * 60 * 60)) * 100) / 100;
+  // Convert to hours with higher precision for short durations
+  const workHourFloat = workHourMs / (1000 * 60 * 60);
+
+  // For very short durations (less than 1 hour), use minute precision
+  if (workHourFloat < 1) {
+    // For sub-minute durations, require at least 1 full minute
+    // This prevents rounding up 30 seconds to 1 minute
+    const totalSeconds = workHourMs / 1000;
+    if (totalSeconds < 60) {
+      return 0; // Less than 1 minute = 0 work hours
+    }
+
+    // Round to nearest minute and convert back to hours
+    const minutes = Math.round(workHourMs / (1000 * 60));
+    return minutes / 60;
+  }
+
+  // For longer durations, round to 2 decimal places as before
+  return Math.round(workHourFloat * 100) / 100;
 };
 
 /**
