@@ -1440,15 +1440,8 @@ export const setupAutoCheckoutConfig = async (req, res, next) => {
               transaction
             });
 
-            let historicalHours = 8.0;
             if (userAttendances.length >= 2) {
-              const totalHours = userAttendances.reduce((sum, att) => {
-                const tIn = new Date(att.time_in);
-                const tOut = new Date(att.time_out);
-                const hours = (tOut - tIn) / (1000 * 60 * 60);
-                return sum + (hours > 0 && hours <= 16 ? hours : 8);
-              }, 0);
-              // info only; historicalHours not used after FAHP refactor
+              // historical pattern no longer used after FAHP refactor (kept for future analytics)
             }
             // Smart prediction removed; use fallback checkout time
             const [hours, minutes, seconds] = fallbackSetting.setting_value.split(':').map(Number);
@@ -1625,12 +1618,6 @@ export const processPastAttendances = async (req, res, next) => {
             });
 
             if (userAttendances.length >= 2) {
-              const totalHours = userAttendances.reduce((sum, att) => {
-                const tIn = new Date(att.time_in);
-                const tOut = new Date(att.time_out);
-                const hours = (tOut - tIn) / (1000 * 60 * 60);
-                return sum + (hours > 0 && hours <= 16 ? hours : 8);
-              }, 0);
               // Smart prediction removed; use fallback checkout time
               const [hours, minutes, seconds] = fallbackTime.split(':').map(Number);
               const base = new Date(attendanceDate + 'T00:00:00.000Z');
@@ -1929,7 +1916,7 @@ export const getSmartCheckoutPrediction = async (req, res, next) => {
         message: 'Akses ditolak. Hanya admin dan manajemen yang dapat mengakses smart prediction.'
       });
     }
-    const { checkinTime, historicalHours = 8.0, dayOfWeek, transitionCount } = req.body;
+    const { checkinTime } = req.body;
 
     // Validate required parameters (for testing endpoint)
     if (checkinTime === undefined) {
@@ -1946,10 +1933,7 @@ export const getSmartCheckoutPrediction = async (req, res, next) => {
       });
     }
 
-    // Use provided historicalHours or default to 8.0 for testing
-    const testHistoricalHours = typeof historicalHours === 'number' ? historicalHours : 8.0;
-    // Get AHP weights
-    const ahpWeights = { disabled: true };
+
 
     // Deprecated: prediction removed. Return 410 Gone.
     return res.status(410).json({
@@ -2050,7 +2034,7 @@ export const getEnhancedAutoCheckoutSettings = async (req, res, next) => {
     for (const attendance of activeAttendances) {
       try {
         const timeIn = new Date(attendance.time_in);
-        const checkinHours = timeIn.getHours() + timeIn.getMinutes() / 60;
+        // const checkinHours = timeIn.getHours() + timeIn.getMinutes() / 60;
 
         // Get user's historical pattern
         const oneMonthAgo = new Date();
