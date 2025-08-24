@@ -3,7 +3,7 @@ console.log('AutoCheckout job: Starting file execution...');
 import cron from 'node-cron';
 // import { Op } from 'sequelize';
 
-import { Attendance, Settings, User } from '../models/index.js';
+import { Attendance, Settings, User, LocationEvent } from '../models/index.js';
 import logger from '../utils/logger.js';
 
 const TOLERANCE_MIN = parseInt(process.env.LATE_CHECKOUT_TOLERANCE_MIN || '120', 10);
@@ -73,8 +73,23 @@ const runMissedCheckoutFlagger = async () => {
         const deadline = new Date(shiftEndJakarta.getTime() + toleranceMs);
 
         if (jakartaTime >= deadline) {
-          // Only flag; do not auto set time_out
-          const note = 'Flagged as likely missed checkout by system.';
+          // Enrichment: fetch last location event (best-effort)
+          let lastLocNote = '';
+          try {
+            const lastEvent = await LocationEvent.findOne({
+              where: { user_id: attendance.user_id },
+              order: [['event_timestamp', 'DESC']],
+              attributes: ['event_timestamp', 'location_id', 'event_type']
+            });
+            if (lastEvent) {
+              const ts = new Date(lastEvent.event_timestamp).toISOString();
+              lastLocNote = ` | last_location_event=${lastEvent.event_type}@${lastEvent.location_id} ${ts}`;
+            }
+          } catch (e) {
+            logger.debug(`LocationEvent enrichment failed for user ${attendance.user_id}: ${e.message}`);
+          }
+
+          const note = `Flagged as likely missed checkout by system.${lastLocNote}`;
           const newNotes = attendance.notes ? `${attendance.notes}\n${note}` : note;
           await attendance.update({ notes: newNotes, updated_at: new Date() });
           flagged++;
