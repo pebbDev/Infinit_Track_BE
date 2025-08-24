@@ -96,13 +96,13 @@ export const triggerWfaBookings = async (req, res) => {
 };
 
 /**
- * Trigger Smart Auto Checkout job manually
+ * Trigger Missed Checkout flagger job manually
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
 export const triggerSmartAutoCheckout = async (req, res) => {
   try {
-    logger.info('API trigger: Smart Auto Checkout job requested', {
+    logger.info('API trigger: Missed checkout flagger requested', {
       triggeredBy: req.user?.id || 'unknown',
       userRole: req.user?.role?.role_name || 'unknown',
       timestamp: new Date().toISOString()
@@ -110,14 +110,14 @@ export const triggerSmartAutoCheckout = async (req, res) => {
 
     const result = await triggerAutoCheckout();
 
-    logger.info('API trigger: Smart Auto Checkout job completed successfully', {
+    logger.info('API trigger: Missed checkout flagger completed successfully', {
       result,
       triggeredBy: req.user?.id || 'unknown'
     });
 
     res.json({
       success: true,
-      message: 'Smart Auto Checkout job executed successfully',
+      message: 'Missed checkout flagger executed successfully',
       data: result,
       executedAt: new Date().toISOString(),
       triggeredBy: {
@@ -126,7 +126,7 @@ export const triggerSmartAutoCheckout = async (req, res) => {
       }
     });
   } catch (error) {
-    logger.error('API trigger: Smart Auto Checkout job failed', {
+    logger.error('API trigger: Missed checkout flagger failed', {
       error: error.message,
       stack: error.stack,
       triggeredBy: req.user?.id || 'unknown'
@@ -134,7 +134,7 @@ export const triggerSmartAutoCheckout = async (req, res) => {
 
     res.status(500).json({
       success: false,
-      message: 'Failed to execute Smart Auto Checkout job',
+      message: 'Failed to execute missed checkout flagger job',
       error: error.message,
       timestamp: new Date().toISOString()
     });

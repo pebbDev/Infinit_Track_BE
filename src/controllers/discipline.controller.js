@@ -1,5 +1,5 @@
 /**
- * Discipline Index Controller - Menggunakan Fuzzy AHP Engine
+ * Discipline Index Controller - Menggunakan FAHP (tanpa FIS)
  * Controller untuk menghitung dan menampilkan indeks kedisiplinan karyawan
  * menggunakan sistem inferensi fuzzy yang terintegrasi dengan AHP
  */
@@ -89,12 +89,12 @@ export const getUserDisciplineIndex = async (req, res, next) => {
         raw_metrics: userMetrics,
         fuzzy_breakdown: disciplineResult.breakdown,
         methodology: {
-          engine: 'Fuzzy AHP',
+          engine: 'FAHP',
           criteria_weights: ahpWeights,
-          approach: 'Fuzzy Inference System with AHP weighting'
+          approach: 'TFN pairwise + Buckley + centroid; weighted normalization'
         }
       },
-      message: 'Indeks kedisiplinan berhasil dihitung menggunakan Fuzzy AHP Engine'
+      message: 'Indeks kedisiplinan berhasil dihitung menggunakan FAHP (tanpa FIS)'
     });
   } catch (error) {
     logger.error('Error calculating user discipline index:', error);
@@ -209,9 +209,9 @@ export const getAllDisciplineIndices = async (req, res, next) => {
           records_per_page: limitNum
         },
         methodology: {
-          engine: 'Fuzzy AHP',
+          engine: 'FAHP',
           criteria_weights: ahpWeights,
-          approach: 'Fuzzy Inference System with AHP weighting'
+          approach: 'TFN pairwise + Buckley + centroid; weighted normalization'
         }
       },
       message: `Indeks kedisiplinan ${validResults.length} karyawan berhasil dihitung`

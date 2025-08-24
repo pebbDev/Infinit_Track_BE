@@ -4,7 +4,7 @@ Selamat datang di repositori backend untuk **Infinite Track**, sebuah **Platform
 
 ## 1. Ringkasan Proyek
 
-**Infinite Track** adalah sistem presensi berbasis Node.js & Express yang menggantikan metode absensi konvensional. Tujuannya adalah untuk meningkatkan efisiensi, fleksibilitas, dan akurasi data kehadiran di lingkungan kerja seperti Infinite Learning. Keunikan utama proyek ini terletak pada implementasi **algoritma Fuzzy AHP** yang disematkan dalam berbagai fitur untuk memberikan penilaian, rekomendasi, dan prediksi yang cerdas dan dapat dipertanggungjawabkan secara logis.
+**Infinite Track** adalah sistem presensi berbasis Node.js & Express yang menggantikan metode absensi konvensional. Tujuannya adalah untuk meningkatkan efisiensi, fleksibilitas, dan akurasi data kehadiran di lingkungan kerja seperti Infinite Learning. Keunikan utama proyek ini terletak pada implementasi **Fuzzy AHP (FAHP) murni** untuk memberikan penilaian dan rekomendasi yang cerdas serta dapat dipertanggungjawabkan.
 
 ### 🎯 **Visi & Misi**
 
@@ -24,56 +24,45 @@ Sistem ini memiliki empat pilar fungsionalitas utama yang membuatnya lebih dari 
 
 ### **🧠 2. Sistem Rekomendasi & Skor Lokasi WFA**
 
-- Secara proaktif merekomendasikan lokasi WFA (kafe, coworking, dll.) terbaik di sekitar pengguna.
-- Setiap lokasi, baik yang direkomendasikan maupun yang diajukan manual, akan dinilai oleh **mesin Fuzzy AHP** untuk menghasilkan **Skor Kelayakan**, membantu manajemen membuat keputusan berbasis data.
-- **Suitability Labels:** 5 tingkat rekomendasi dari "Tidak Direkomendasikan" hingga "Sangat Direkomendasikan"
-- **Multi-criteria Analysis:** Location type (70%), Distance (23%), Amenities (7%)
+- Merekomendasikan lokasi WFA di sekitar pengguna.
+- Setiap lokasi dinilai oleh **FAHP murni** untuk menghasilkan **Skor Kelayakan**.
+- **Suitability Labels:** 5 tingkat (Sangat Rendah → Sangat Tinggi) berbasis interval sama.
+- **Multi-criteria Analysis (default):** Location type, Distance, Amenities.
 
 ### **⚡ 3. Proses Otomatis Malam Hari (Cron Jobs)**
 
-- Sistem secara mandiri menjaga integritas data setiap malam.
 - **Auto Alpha:** Menandai pengguna yang tidak hadir tanpa keterangan.
-- **Smart Auto Check-out:** Memprediksi jam pulang secara cerdas bagi pengguna yang lupa check-out, membuat data jam kerja lebih akurat.
-- **WFA Resolution:** Memproses booking WFA yang sudah disetujui.
-- **Manual Trigger API:** Admin dapat memicu jobs secara manual untuk debugging dan maintenance.
+- **Missed Checkout Flag:** Menandai sesi yang melewati jam pulang + toleransi tanpa checkout (tanpa prediksi fuzzy).
+- **WFA Resolution:** Memproses booking WFA yang disetujui.
+- **Manual Trigger API:** Admin dapat memicu jobs secara manual.
 
 ### **📊 4. Dashboard Analitik dengan Indeks Kedisiplinan**
 
 - Menyediakan laporan kehadiran yang komprehensif untuk manajemen.
-- Menghasilkan **Indeks Kedisiplinan Karyawan**, sebuah skor 0-100 yang dihitung secara _on-the-fly_ menggunakan Fuzzy AHP untuk memberikan wawasan kinerja yang holistik.
-- **Real-time Analytics:** Parallel processing untuk kalkulasi cepat multiple users.
-- **Performance Insights:** Trend analysis dan predictive analytics untuk HR decisions.
+- Menghasilkan **Indeks Kedisiplinan** 0–100 menggunakan **FAHP murni**.
 
 ## 3. Tumpukan Teknologi (Tech Stack)
-
-Backend ini dibangun di atas tumpukan teknologi JavaScript yang modern dan andal:
 
 ### **🏗️ Core Technologies**
 
 - **Runtime:** Node.js (ESM modules)
-- **Framework:** Express.js dengan MVC architecture
-- **Database:** MySQL/MariaDB dengan timezone support
-- **ORM:** Sequelize dengan migration & seeding support
-- **Authentication:** JWT dengan sliding TTL dan role-based access control
+- **Framework:** Express.js
+- **Database:** MySQL/MariaDB
+- **ORM:** Sequelize
+- **Authentication:** JWT + RBAC
 
-### **🧠 Intelligence Engine**
+### **🧠 Decision Engine**
 
-- **Fuzzy Logic:** `fuzzylogic` library untuk inference systems
-- **AHP Algorithm:** `ahp` library untuk multi-criteria decision making
-- **Hybrid Scoring:** 60% Fuzzy Logic + 40% AHP weights untuk optimal results
+- **FAHP (Pure):** TFN pairwise → Fuzzy Geometric Mean (Buckley) → centroid defuzzification → normalized weights (∑w=1)
+- **Consistency Check:** CR dihitung dari matriks defuzzifikasi (eigenvalue approximation)
 
 ### **☁️ External Services**
 
-- **Cloudinary:** Photo storage dan image processing
-- **Geoapify:** Location data dan place recommendations
-- **Winston:** Structured logging dengan daily rotation
+- **Cloudinary** (media), **Geoapify** (places), **Winston** (logging)
 
 ### **🛠️ Development Tools**
 
-- **API Documentation:** Swagger/OpenAPI dengan interactive UI
-- **Code Quality:** ESLint + Prettier untuk consistent code style
-- **Process Management:** PM2 untuk production deployment
-- **Monitoring:** Comprehensive health checks dan error tracking
+- **Swagger/OpenAPI**, **ESLint + Prettier**, **PM2**
 
 ## 4. Panduan Setup & Instalasi
 

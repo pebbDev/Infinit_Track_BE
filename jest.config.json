@@ -1,11 +1,5 @@
 {
-  "preset": "babel-preset-jest",
   "testEnvironment": "node",
   "transform": {},
-  "extensionsToTreatAsEsm": [".js"],
-  "globals": {
-    "jest": {
-      "useESM": true
-    }
-  }
+  "moduleNameMapper": {}
 }

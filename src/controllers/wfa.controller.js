@@ -3,29 +3,8 @@ import axios from 'axios';
 import Settings from '../models/settings.model.js';
 import logger from '../utils/logger.js';
 import fuzzyEngine from '../utils/fuzzyAhpEngine.js';
+import { calculateDistance } from '../utils/geofence.js';
 
-/**
- * Calculate distance between two coordinates using Haversine formula
- * @param {number} lat1 - Latitude of first point
- * @param {number} lon1 - Longitude of first point
- * @param {number} lat2 - Latitude of second point
- * @param {number} lon2 - Longitude of second point
- * @returns {number} Distance in meters
- */
-function calculateDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371e3; // Earth's radius in meters
-  const φ1 = (lat1 * Math.PI) / 180;
-  const φ2 = (lat2 * Math.PI) / 180;
-  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
-
-  const a =
-    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  return R * c;
-}
 
 /**
  * Get WFA recommendations based on user location
@@ -132,11 +111,11 @@ export const getWfaRecommendations = async (req, res, next) => {
     const geoapifyResponse = await makeGeoapifyRequest();
     const candidates = geoapifyResponse.data.features || [];
 
-    logger.info(`Geoapify returned ${candidates.length} candidates`); // Langkah C: Gunakan Fuzzy AHP Engine untuk scoring
+    logger.info(`Geoapify returned ${candidates.length} candidates`); // Scoring with FAHP weights (no FIS)
     // Dapatkan bobot AHP untuk kriteria WFA
     const ahpWeights = fuzzyEngine.getWfaAhpWeights();
 
-    logger.info('Using Fuzzy AHP Engine with weights:', ahpWeights); // Score setiap kandidat menggunakan mesin terpusat
+    logger.info('Using FAHP weights:', ahpWeights); // Score setiap kandidat menggunakan mesin terpusat
     const scoredRecommendations = [];
     const processedPlaces = new Set(); // Track places dengan multiple identifiers
     const duplicateWarnings = new Set(); // Track warning messages untuk mencegah spam
@@ -207,7 +186,7 @@ export const getWfaRecommendations = async (req, res, next) => {
         });
       }
     }
-    logger.info(`Scored ${scoredRecommendations.length} places using Fuzzy AHP Engine`);
+    logger.info(`Scored ${scoredRecommendations.length} places using FAHP (no FIS)`);
 
     // Langkah D: Urutkan berdasarkan skor dan Kirim Respons
     const sortedRecommendations = scoredRecommendations
@@ -315,13 +294,12 @@ export const getWfaRecommendations = async (req, res, next) => {
           total_candidates_found: candidates.length,
           recommendations_returned: sortedRecommendations.length
         },
-        fuzzy_ahp_methodology: {
-          approach: 'Unified Fuzzy AHP Engine',
-          criteria_weights: ahpWeights,
-          engine_version: '2.0'
+        fahp_methodology: {
+          approach: 'Pure FAHP (TFN + Buckley + centroid)',
+          criteria_weights: ahpWeights
         }
       },
-      message: 'Rekomendasi WFA berhasil diambil menggunakan Fuzzy AHP Engine'
+      message: 'Rekomendasi WFA berhasil diambil menggunakan FAHP (tanpa FIS)'
     });
   } catch (error) {
     logger.error(`WFA recommendations error: ${error.message}`, { stack: error.stack });
@@ -391,7 +369,7 @@ export const getWfaAhpConfig = async (req, res, next) => {
         },
         consistency_ratio: ahpWeights.consistency_ratio,
         is_consistent: ahpWeights.consistency_ratio <= 0.1,
-        method: 'Fuzzy AHP Engine v3.0 - Comprehensive Amenity Assessment',
+        method: 'FAHP (TFN + Buckley + centroid) - Comprehensive Amenity Assessment',
         criteria_explanation: {
           location_type:
             'Penilaian berdasarkan kategori tempat (cafe, hotel, coworking space, dll)',
