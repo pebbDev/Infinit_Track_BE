@@ -1961,32 +1961,23 @@ export const getSmartEngineConfig = async (req, res, next) => {
         message:
           'Akses ditolak. Hanya admin dan manajemen yang dapat mengakses konfigurasi smart checkout.'
       });
-    } // Get weights from imported function
-    const weights = fuzzyEngine.getCheckoutPredictionAhpWeights();
+    }
+
+    // Feature deprecated in FAHP refactor - only flagger configuration is returned
+    const toleranceMin = parseInt(process.env.LATE_CHECKOUT_TOLERANCE_MIN || '120', 10);
+    const defaultShiftEnd = process.env.DEFAULT_SHIFT_END || '17:00:00';
 
     res.status(200).json({
       success: true,
       data: {
-        ahp_weights: weights,
-        fuzzy_sets: {
-          checkin_time: ['pagi', 'siang', 'sore'],
-          historical_hours: ['pendek', 'normal', 'panjang'],
-          transition_count: ['rendah', 'sedang', 'tinggi'],
-          day_of_week: ['awal_minggu', 'tengah_minggu', 'akhir_minggu'],
-          output_duration: ['pendek', 'normal', 'panjang']
+        engine_status: 'REMOVED',
+        message: 'Checkout prediction removed; using missed-checkout flagger.',
+        flagger_config: {
+          late_checkout_tolerance_min: toleranceMin,
+          default_shift_end: defaultShiftEnd,
+          timezone: 'Asia/Jakarta'
         },
-        criteria_definitions: {
-          checkin_time: 'Waktu check-in dalam format jam (0-24)',
-          historical_pattern: 'Rata-rata jam kerja historis pengguna',
-          day_context: 'Konteks hari dalam seminggu (0=Minggu, 6=Sabtu)',
-          transition_factor: 'Frekuensi perpindahan lokasi/mobilitas'
-        },
-        methodology: 'Fuzzy Inference System dengan AHP weighting',
-        engine_version: '2.0 - Unified Fuzzy AHP Engine',
-        consistency_ratio: weights.consistency_ratio,
-        is_consistent: weights.consistency_ratio <= 0.1,
-        description:
-          'Smart Checkout menggunakan Fuzzy AHP untuk prediksi waktu pulang yang realistis'
+        methodology: 'No FIS; FAHP not used for checkout. Rule-based flag by time tolerance.'
       }
     });
   } catch (error) {

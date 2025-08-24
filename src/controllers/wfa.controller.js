@@ -279,11 +279,8 @@ export const getWfaRecommendations = async (req, res, next) => {
             final_score: place.scoring_details.final_score,
             component_scores: place.scoring_details.breakdown,
             weights_used: ahpWeights,
-            confidence_adjustment_applied:
-              place.scoring_details.breakdown.confidence_adjusted_score !==
-              place.scoring_details.breakdown.raw_score,
-            availability_penalty_applied:
-              place.scoring_details.breakdown.availability_penalty_applied || false
+            cr: ahpWeights.consistency_ratio,
+            warning: place.scoring_details.warning || null
           }
         })),
         search_criteria: {
