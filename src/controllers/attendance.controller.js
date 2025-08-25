@@ -22,10 +22,12 @@ import {
 } from '../utils/geofence.js';
 import { formatWorkHour, calculateWorkHour, formatTimeOnly } from '../utils/workHourFormatter.js';
 import { applySearch } from '../utils/searchHelper.js';
-import { triggerAutoCheckout } from '../jobs/autoCheckout.job.js';
-import { triggerResolveWfaBookings } from '../jobs/resolveWfaBookings.job.js';
-import { triggerCreateGeneralAlpha } from '../jobs/createGeneralAlpha.job.js';
-import fuzzyEngine from '../utils/fuzzyAhpEngine.js';
+import { triggerAutoCheckout, runSmartAutoCheckoutForDate } from '../jobs/autoCheckout.job.js';
+import {
+  triggerResolveWfaBookings,
+  resolveWfaBookingsForDate
+} from '../jobs/resolveWfaBookings.job.js';
+import { runGeneralAlphaForDate } from '../jobs/createGeneralAlpha.job.js';
 import logger from '../utils/logger.js';
 
 export const clockIn = async (req, res) => {
@@ -265,6 +267,29 @@ export const getAttendanceHistory = async (req, res) => {
       const year = attendanceDate.getFullYear();
       const monthYear = `${month} ${year}`;
 
+      // Extract PredOut from notes if present for history display
+      const notesStr = att.notes || '';
+      const smartMatch = notesStr.match(/\[Smart AC\]\s*pred=([^,]+),\s*used=([^,]+),/);
+      const fallbackMatch = notesStr.match(/\[Fallback AC\]\s*used=([^,]+),/);
+      const predOutStr = smartMatch ? smartMatch[1] : fallbackMatch ? fallbackMatch[1] : null;
+      // Derive work hour display when DB value is 0 or invalid
+      let workHourDisplay = att.work_hour;
+      try {
+        const rawIn = att.time_in ? new Date(att.time_in) : null;
+        const rawOut = att.time_out ? new Date(att.time_out) : null;
+        const outBeforeIn = rawIn && rawOut ? rawOut.getTime() < rawIn.getTime() : false;
+        if (workHourDisplay == null || workHourDisplay <= 0 || outBeforeIn) {
+          if (predOutStr && rawIn) {
+            const usedDate = new Date(`${att.attendance_date}T${predOutStr}:00+07:00`);
+            workHourDisplay = calculateWorkHour(rawIn, usedDate);
+          } else if (rawIn && rawOut) {
+            workHourDisplay = calculateWorkHour(rawIn, rawOut);
+          }
+        }
+      } catch (_e) {
+        // keep original workHourDisplay
+      }
+
       return {
         id_attendance: att.id_attendance,
         attendance_date: att.attendance_date,
@@ -272,7 +297,8 @@ export const getAttendanceHistory = async (req, res) => {
         monthYear: monthYear,
         time_in: formatTimeOnly(att.time_in),
         time_out: formatTimeOnly(att.time_out),
-        work_hour: formatWorkHour(att.work_hour),
+        work_hour: formatWorkHour(workHourDisplay),
+        work_hour_raw: workHourDisplay,
         category: att.attendance_category ? att.attendance_category.category_name : null,
         status: att.status ? att.status.attendance_status_name : null,
         location: att.location ? att.location.description : null,
@@ -727,10 +753,23 @@ export const getAttendanceStatus = async (req, res, next) => {
   try {
     const userId = req.user.id;
 
-    // Definisikan "Hari Ini" dengan timezone Asia/Jakarta yang benar
-    const now = new Date();
-    const localTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
-    const todayDate = localTime.toISOString().split('T')[0]; // YYYY-MM-DD format    // Ambil pengaturan dari database
+    // Effective time input: prioritize query ?now, then header X-Client-Now; fallback to server Jakarta time
+    let effectiveNow = null;
+    const nowQuery = req.query?.now;
+    const nowHeader = req.headers['x-client-now'];
+    if (nowQuery) {
+      const parsed = new Date(nowQuery);
+      if (!isNaN(parsed.getTime())) effectiveNow = parsed;
+    }
+    if (!effectiveNow && nowHeader) {
+      const parsed = new Date(Array.isArray(nowHeader) ? nowHeader[0] : nowHeader);
+      if (!isNaN(parsed.getTime())) effectiveNow = parsed;
+    }
+    if (!effectiveNow) {
+      const now = new Date();
+      effectiveNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
+    }
+    const todayDate = effectiveNow.toISOString().split('T')[0]; // YYYY-MM-DD
     const settings = await Settings.findAll({
       where: {
         setting_key: {
@@ -758,8 +797,8 @@ export const getAttendanceStatus = async (req, res, next) => {
 
     // Cek hari libur menggunakan date-holidays
     const hd = new Holidays(holidayRegion);
-    const isHoliday = hd.isHoliday(localTime);
-    const isWeekend = localTime.getDay() === 0 || localTime.getDay() === 6; // Sunday = 0, Saturday = 6
+    const isHoliday = hd.isHoliday(effectiveNow);
+    const isWeekend = effectiveNow.getDay() === 0 || effectiveNow.getDay() === 6; // Sunday = 0, Saturday = 6
     const isHolidayOrWeekend = isHoliday || isWeekend;
 
     // Cek absensi hari ini
@@ -852,9 +891,9 @@ export const getAttendanceStatus = async (req, res, next) => {
         };
       }
     } // Tentukan waktu check-in yang diizinkan (08:00 - 18:00)
-    // Calculate time using proper Jakarta timezone directly from Date object
-    const currentHour = localTime.getHours();
-    const currentMinute = localTime.getMinutes();
+    // Calculate time using effective time
+    const currentHour = effectiveNow.getHours();
+    const currentMinute = effectiveNow.getMinutes();
     const currentTimeMinutes = currentHour * 60 + currentMinute;
 
     const checkinStartMinutes =
@@ -863,11 +902,13 @@ export const getAttendanceStatus = async (req, res, next) => {
       parseInt(checkinEndTime.split(':')[0]) * 60 + parseInt(checkinEndTime.split(':')[1]);
 
     // Tentukan can_check_in
+    // For WFA mode (booking approved today), ignore holiday/weekend gating; use time window only
+    const isWfaMode = active_mode === 'Work From Anywhere';
     const can_check_in =
-      (!isHolidayOrWeekend || holidayCheckinEnabled) &&
       !currentAttendance &&
       currentTimeMinutes >= checkinStartMinutes &&
-      currentTimeMinutes <= checkinEndMinutes;
+      currentTimeMinutes <= checkinEndMinutes &&
+      (isWfaMode || !isHolidayOrWeekend || holidayCheckinEnabled);
 
     // Tentukan can_check_out
     const can_check_out = currentAttendance && !currentAttendance.time_out; // Bentuk respons
@@ -886,7 +927,7 @@ export const getAttendanceStatus = async (req, res, next) => {
         today_date: todayDate,
         is_holiday: isHolidayOrWeekend,
         holiday_checkin_enabled: holidayCheckinEnabled,
-        current_time: getJakartaTime().toISOString(),
+        current_time: effectiveNow.toISOString(),
         checkin_window: {
           start_time: checkinStartTime,
           end_time: checkinEndTime
@@ -1732,33 +1773,89 @@ export const manualResolveWfaBookings = async (req, res, next) => {
 };
 
 /**
+ * Test trigger: General Alpha for a specific date (Admin only)
+ * POST /api/attendance/manual-general-alpha
+ * Body: { target_date: 'YYYY-MM-DD' }
+ */
+export const manualGeneralAlphaForDate = async (req, res, next) => {
+  try {
+    if (req.user.role_name !== 'Admin' && req.user.role_name !== 'Management') {
+      return res.status(403).json({ success: false, message: 'Akses ditolak.' });
+    }
+    const rawTarget =
+      (req.body && req.body.target_date) ||
+      (req.query && req.query.target_date) ||
+      (req.params && req.params.target_date) ||
+      null;
+    const target_date = typeof rawTarget === 'string' ? rawTarget.trim() : rawTarget;
+    if (!target_date || !/^\d{4}-\d{2}-\d{2}$/.test(String(target_date))) {
+      return res.status(400).json({ success: false, message: 'target_date harus YYYY-MM-DD' });
+    }
+    const result = await runGeneralAlphaForDate(target_date);
+    res.status(200).json({ success: true, data: result });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Test trigger: WFA Alpha resolver for a specific date (Admin only)
+ * POST /api/attendance/manual-resolve-wfa-for-date
+ * Body: { target_date: 'YYYY-MM-DD' }
+ */
+export const manualResolveWfaForDate = async (req, res, next) => {
+  try {
+    if (req.user.role_name !== 'Admin' && req.user.role_name !== 'Management') {
+      return res.status(403).json({ success: false, message: 'Akses ditolak.' });
+    }
+    const rawTarget =
+      (req.body && req.body.target_date) ||
+      (req.query && req.query.target_date) ||
+      (req.params && req.params.target_date) ||
+      null;
+    const target_date = typeof rawTarget === 'string' ? rawTarget.trim() : rawTarget;
+    if (!target_date || !/^\d{4}-\d{2}-\d{2}$/.test(String(target_date))) {
+      return res.status(400).json({ success: false, message: 'target_date harus YYYY-MM-DD' });
+    }
+    const result = await resolveWfaBookingsForDate(target_date);
+    res.status(200).json({ success: true, data: result });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Test trigger: Smart Auto Checkout for specific date (Admin only)
+ * POST /api/attendance/manual-smart-auto-checkout
+ * Body: { target_date: 'YYYY-MM-DD' }
+ */
+export const manualSmartAutoCheckoutForDate = async (req, res, next) => {
+  try {
+    if (req.user.role_name !== 'Admin' && req.user.role_name !== 'Management') {
+      return res.status(403).json({ success: false, message: 'Akses ditolak.' });
+    }
+    const rawTarget =
+      (req.body && req.body.target_date) ||
+      (req.query && req.query.target_date) ||
+      (req.params && req.params.target_date) ||
+      null;
+    const target_date = typeof rawTarget === 'string' ? rawTarget.trim() : rawTarget;
+    if (!target_date || !/^\d{4}-\d{2}-\d{2}$/.test(String(target_date))) {
+      return res.status(400).json({ success: false, message: 'target_date harus YYYY-MM-DD' });
+    }
+    await runSmartAutoCheckoutForDate(target_date);
+    res.status(200).json({ success: true, message: 'Smart Auto Checkout executed', target_date });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * Manual trigger for create general alpha records job (Admin only)
  * This endpoint allows admins to manually trigger the general alpha creator
  * for testing purposes or to handle missed daily runs
  */
-export const manualCreateGeneralAlpha = async (req, res, next) => {
-  try {
-    // Only allow admins to trigger manual alpha creation
-    if (req.user.role_name !== 'Admin' && req.user.role_name !== 'Management') {
-      return res.status(403).json({
-        success: false,
-        message:
-          'Akses ditolak. Hanya admin dan manajemen yang dapat menjalankan pembuatan alpha records secara manual.'
-      });
-    }
-
-    const result = await triggerCreateGeneralAlpha();
-
-    res.status(200).json({
-      success: true,
-      message: 'Create general alpha records job berhasil dijalankan secara manual.',
-      data: result
-    });
-  } catch (error) {
-    logger.error('Error in manual create general alpha:', error);
-    next(error);
-  }
-};
+// Removed legacy manualCreateGeneralAlpha in favor of date-specific trigger
 
 /**
  * Log location event - lightweight endpoint for recording geofence enter/exit events
@@ -1933,16 +2030,12 @@ export const getSmartCheckoutPrediction = async (req, res, next) => {
       });
     }
 
-
-
     // Deprecated: prediction removed. Return 410 Gone.
     return res.status(410).json({
       success: false,
       code: 'FEATURE_REMOVED',
       message: 'Checkout prediction has been removed. Use missed-checkout flagger.'
     });
-
-
   } catch (error) {
     logger.error('Error getting smart checkout prediction:', error);
     next(error);

@@ -25,24 +25,25 @@ const createGeneralAlphaRecords = async () => {
       `Timezone debug - UTC: ${now.toISOString()}, Jakarta: ${jakartaTime.toISOString()}, Date: ${todayDate}`
     );
 
-    // Initialize Indonesian holidays checker
-    const hd = new Holidays('ID'); // Indonesia
-    const isHoliday = hd.isHoliday(jakartaTime);
-    const dayOfWeek = jakartaTime.getDay(); // 0 = Sunday, 6 = Saturday
+    // Determine yesterday (H-1) as target date for GENERAL alpha marking
+    const target = new Date(jakartaTime);
+    target.setDate(target.getDate() - 1);
+    const targetDate = target.toISOString().split('T')[0];
 
-    logger.info(
-      `Day check - Day of week: ${dayOfWeek} (${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dayOfWeek]}), Is holiday: ${isHoliday}`
-    );
-
-    // Check if today is a working day (Monday-Friday and not a holiday)
+    // Skip if target date is weekend or holiday (GENERAL alpha only runs on working days)
+    const hd = new Holidays('ID');
+    const isHoliday = hd.isHoliday(target);
+    const dayOfWeek = target.getDay(); // 0 = Sunday, 6 = Saturday
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
 
     if (isWeekend || isHoliday) {
-      logger.info(`Skipping alpha record creation - today is ${isWeekend ? 'weekend' : 'holiday'}`);
+      logger.info(
+        `Skipping GENERAL alpha - target ${targetDate} is ${isWeekend ? 'weekend' : 'holiday'}`
+      );
       return;
     }
 
-    logger.info(`Processing general alpha records for working day: ${todayDate}`);
+    logger.info(`Processing GENERAL alpha records for working day: ${targetDate}`);
 
     // STEP A: Get all users who are required to attend (excluding Admin and Management)
     const requiredUsers = await User.findAll({
@@ -70,22 +71,22 @@ const createGeneralAlphaRecords = async () => {
 
     logger.info(`Found ${requiredUserIds.length} users who are required to attend`);
 
-    // STEP B: Get users who already have records for today
+    // STEP B: Get users who already have attendance for targetDate
 
     // B1: Users who already checked in (have attendance record)
     const presentUsers = await Attendance.findAll({
       attributes: ['user_id'],
       where: {
-        attendance_date: todayDate
+        attendance_date: targetDate
       }
     });
     const presentUserIds = presentUsers.map((a) => a.user_id);
 
-    // B2: Users who have approved WFA bookings for today
+    // B2: Users who have approved WFA bookings for targetDate (exclude from GENERAL alpha)
     const wfaUsers = await Booking.findAll({
       attributes: ['user_id'],
       where: {
-        schedule_date: todayDate,
+        schedule_date: targetDate,
         status: 1 // approved status
       }
     });
@@ -98,8 +99,11 @@ const createGeneralAlphaRecords = async () => {
       `Users with existing records: ${presentOrWfaUserIds.length} (${presentUserIds.length} checked-in, ${wfaUserIds.length} approved WFA)`
     );
 
-    // STEP C: Determine who should get alpha status
-    const alphaUserIds = requiredUserIds.filter((userId) => !presentOrWfaUserIds.includes(userId));
+    // STEP C (GENERAL): Determine who should get alpha status
+    // Required users who have no attendance AND do not have approved WFA booking
+    const alphaUserIds = requiredUserIds.filter(
+      (userId) => !presentUserIds.includes(userId) && !wfaUserIds.includes(userId)
+    );
 
     if (alphaUserIds.length === 0) {
       logger.info(
@@ -120,24 +124,32 @@ const createGeneralAlphaRecords = async () => {
         const existingRecord = await Attendance.findOne({
           where: {
             user_id: userId,
-            attendance_date: todayDate
+            attendance_date: targetDate
           }
         });
 
         if (!existingRecord) {
+          // Stamp time_in/time_out to execution time (WIB) on the target date
+          const exec = new Date();
+          const execJakarta = new Date(exec.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
+          const hh = String(execJakarta.getHours()).padStart(2, '0');
+          const mm = String(execJakarta.getMinutes()).padStart(2, '0');
+          const ss = String(execJakarta.getSeconds()).padStart(2, '0');
+          const stampedDateTime = new Date(`${targetDate}T${hh}:${mm}:${ss}+07:00`);
+
           await Attendance.create({
             user_id: userId,
-            attendance_date: todayDate,
-            status_id: 3, // Alpha status
-            category_id: 1, // Work From Office (default for alpha)
+            attendance_date: targetDate,
+            status_id: 3, // Alpha
+            category_id: 1, // WFO as default for GENERAL alpha
             location_id: null,
             booking_id: null,
-            time_in: jakartaTime,
-            time_out: jakartaTime,
+            time_in: stampedDateTime, // WIB execution time on target date
+            time_out: stampedDateTime,
             work_hour: 0,
-            notes: 'System-generated record: User did not check-in.',
-            created_at: jakartaTime,
-            updated_at: jakartaTime
+            notes: 'Auto alpha (working day, no attendance record)',
+            created_at: stampedDateTime,
+            updated_at: stampedDateTime
           });
 
           alphaRecordsCreated++;
@@ -166,10 +178,10 @@ const createGeneralAlphaRecords = async () => {
  * Runs on working days (Monday-Friday) at 23:45 Jakarta time
  */
 export const startCreateGeneralAlphaJob = () => {
-  logger.info('Create General Alpha job scheduled to run on working days at 23:45');
+  logger.info('Create General Alpha job scheduled to run on working days at 23:55');
 
   // Schedule cron job to run Monday-Friday at 23:45 Jakarta time
-  cron.schedule('45 23 * * 1-5', createGeneralAlphaRecords, {
+  cron.schedule('55 23 * * 1-5', createGeneralAlphaRecords, {
     scheduled: true,
     timezone: 'Asia/Jakarta'
   });
@@ -188,4 +200,115 @@ export const triggerCreateGeneralAlpha = async () => {
     message: 'General alpha records creation completed',
     timestamp: new Date().toISOString()
   };
+};
+
+/**
+ * Run GENERAL alpha for a specific target date (YYYY-MM-DD) - testing/ops helper
+ */
+export const runGeneralAlphaForDate = async (targetDate) => {
+  try {
+    logger.info(`Running GENERAL alpha for target date: ${targetDate}`);
+
+    // Build target Date in Jakarta timezone for weekend/holiday evaluation
+    const base = new Date(`${targetDate}T00:00:00.000Z`);
+    const hd = new Holidays('ID');
+    const jakartaTimeString = base.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' });
+    const targetJakarta = new Date(jakartaTimeString);
+    const isHoliday = hd.isHoliday(targetJakarta);
+    const dayOfWeek = targetJakarta.getDay();
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+    if (isWeekend || isHoliday) {
+      logger.info(
+        `Skipping GENERAL alpha (override) - target ${targetDate} is ${isWeekend ? 'weekend' : 'holiday'}`
+      );
+      return { created: 0, skipped: 0 };
+    }
+
+    // STEP A: Users excluding Admin/Management
+    const requiredUsers = await User.findAll({
+      attributes: ['id_users'],
+      include: [
+        {
+          model: Role,
+          as: 'role',
+          where: { role_name: { [Op.notIn]: ['Admin', 'Management'] } }
+        }
+      ],
+      where: { deleted_at: null }
+    });
+    const requiredUserIds = requiredUsers.map((u) => u.id_users);
+
+    // STEP B: Present users on target date
+    const presentUsers = await Attendance.findAll({
+      attributes: ['user_id'],
+      where: { attendance_date: targetDate }
+    });
+    const presentUserIds = presentUsers.map((a) => a.user_id);
+
+    // STEP C: Users with approved WFA bookings on target date (excluded from GENERAL)
+    const wfaUsers = await Booking.findAll({
+      attributes: ['user_id'],
+      where: { schedule_date: targetDate, status: 1 }
+    });
+    const wfaUserIds = wfaUsers.map((b) => b.user_id);
+
+    // Determine GENERAL alpha candidates
+    const alphaUserIds = requiredUserIds.filter(
+      (uid) => !presentUserIds.includes(uid) && !wfaUserIds.includes(uid)
+    );
+
+    if (alphaUserIds.length === 0) {
+      logger.info('GENERAL alpha override: No candidates');
+      return { created: 0, skipped: 0 };
+    }
+
+    let created = 0;
+    let skipped = 0;
+
+    // Execution time in Jakarta for stamping on target date
+    const exec = new Date();
+    const execJakarta = new Date(exec.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
+    const hh = String(execJakarta.getHours()).padStart(2, '0');
+    const mm = String(execJakarta.getMinutes()).padStart(2, '0');
+    const ss = String(execJakarta.getSeconds()).padStart(2, '0');
+    const stampedDateTime = new Date(`${targetDate}T${hh}:${mm}:${ss}+07:00`);
+
+    for (const userId of alphaUserIds) {
+      try {
+        const exists = await Attendance.findOne({
+          where: { user_id: userId, attendance_date: targetDate }
+        });
+        if (exists) {
+          skipped++;
+          continue;
+        }
+        await Attendance.create({
+          user_id: userId,
+          attendance_date: targetDate,
+          status_id: 3,
+          category_id: 1,
+          location_id: null,
+          booking_id: null,
+          time_in: stampedDateTime,
+          time_out: stampedDateTime,
+          work_hour: 0,
+          notes: 'Auto alpha (override run - working day, no attendance)',
+          created_at: stampedDateTime,
+          updated_at: stampedDateTime
+        });
+        created++;
+      } catch (e) {
+        logger.error(`GENERAL alpha override failed for user ${userId}: ${e.message}`);
+      }
+    }
+
+    logger.info(
+      `GENERAL alpha override completed for ${targetDate}. created=${created}, skipped=${skipped}`
+    );
+    return { created, skipped };
+  } catch (error) {
+    logger.error('runGeneralAlphaForDate failed:', error);
+    return { created: 0, skipped: 0, error: error.message };
+  }
 };

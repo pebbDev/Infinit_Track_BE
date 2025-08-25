@@ -7,10 +7,11 @@ import {
   Role,
   Location,
   AttendanceCategory,
-  AttendanceStatus
+  AttendanceStatus,
+  Settings
 } from '../models/index.js';
 import logger from '../utils/logger.js';
-import { formatWorkHour, formatTimeOnly } from '../utils/workHourFormatter.js';
+import { formatWorkHour, formatTimeOnly, calculateWorkHour } from '../utils/workHourFormatter.js';
 import fuzzyAhpEngine from '../utils/fuzzyAhpEngine.js';
 
 /**
@@ -22,6 +23,23 @@ import fuzzyAhpEngine from '../utils/fuzzyAhpEngine.js';
  */
 const calculateUserMetrics = async (userId, startDate, endDate) => {
   try {
+    // Load required attendance settings (use DB-configured values; fallback defaults)
+    const settings = await Settings.findAll({
+      where: {
+        setting_key: {
+          [Op.in]: ['checkin.start_time']
+        }
+      }
+    });
+    const settingsMap = {};
+    settings.forEach((s) => {
+      settingsMap[s.setting_key] = s.setting_value;
+    });
+    const checkinStartTime = settingsMap['checkin.start_time'] || '08:00:00';
+
+    const startParts = checkinStartTime.split(':').map((v) => parseInt(v, 10) || 0);
+    const startMinutes = (startParts[0] || 0) * 60 + (startParts[1] || 0);
+
     const whereClause = {
       user_id: userId
     };
@@ -49,75 +67,73 @@ const calculateUserMetrics = async (userId, startDate, endDate) => {
 
     if (attendanceRecords.length === 0) {
       return {
-        alpha_rate: 0,
-        avg_lateness_minutes: 0,
-        lateness_frequency: 0,
-        work_hour_consistency: 75
+        alpha_rate: 0, // percent 0..100
+        avg_lateness_minutes: 0, // minutes 0..60
+        lateness_frequency: 0, // percent 0..100
+        work_hour_consistency: 0 // percent 0..100
       };
     }
 
-    // Calculate metrics
-    const totalDays = attendanceRecords.length;
+    // Calculate metrics according to FAHP discipline indicators (attendance-only)
+    const totalDays = attendanceRecords.length; // observation days within selected period
+
+    // Separate present vs alpha
     let alphaDays = 0;
-    let lateDays = 0;
-    let totalLatenessMinutes = 0;
-    let workHours = [];
-
-    attendanceRecords.forEach((record) => {
-      const status = record.status?.attendance_status_name || '';
-
-      // Count alpha days
-      if (status.toLowerCase() === 'alpa' || status.toLowerCase() === 'alpha') {
+    const presentRecords = [];
+    for (const record of attendanceRecords) {
+      const statusName = (record.status?.attendance_status_name || '').toLowerCase();
+      if (statusName === 'alpa' || statusName === 'alpha') {
         alphaDays++;
+      } else {
+        presentRecords.push(record);
       }
-
-      // Count late days and calculate lateness
-      if (status.toLowerCase() === 'terlambat' || status.toLowerCase() === 'late') {
-        lateDays++;
-
-        // Calculate lateness in minutes
-        if (record.time_in) {
-          const timeIn = new Date(`2000-01-01T${record.time_in}`);
-          const standardStart = new Date('2000-01-01T08:00:00'); // Assuming 8 AM start
-          const latenessMs = timeIn.getTime() - standardStart.getTime();
-          const latenessMinutes = Math.max(0, latenessMs / (1000 * 60));
-          totalLatenessMinutes += latenessMinutes;
-        }
-      }
-
-      // Collect work hours for consistency calculation
-      if (record.work_hour && record.work_hour > 0) {
-        workHours.push(parseFloat(record.work_hour));
-      }
-    });
-
-    // Calculate alpha rate (percentage)
-    const alphaRate = totalDays > 0 ? (alphaDays / totalDays) * 100 : 0;
-
-    // Calculate average lateness in minutes
-    const avgLatenessMinutes = lateDays > 0 ? totalLatenessMinutes / lateDays : 0;
-
-    // Calculate lateness frequency (percentage)
-    const latenessFrequency = totalDays > 0 ? (lateDays / totalDays) * 100 : 0;
-
-    // Calculate work hour consistency score
-    let workHourConsistency = 75; // Default score
-    if (workHours.length > 1) {
-      const avgWorkHours = workHours.reduce((sum, h) => sum + h, 0) / workHours.length;
-      const variance =
-        workHours.reduce((sum, h) => sum + Math.pow(h - avgWorkHours, 2), 0) / workHours.length;
-      const standardDeviation = Math.sqrt(variance);
-
-      // Convert to consistency score (lower deviation = higher consistency)
-      // Max score 100, decreases as deviation increases
-      workHourConsistency = Math.max(20, 100 - standardDeviation * 20);
     }
 
+    const presentDays = presentRecords.length;
+
+    // Lateness calculations across present days
+    let lateDays = 0;
+    let totalLatenessMinutes = 0;
+    let consistencyDays = 0; // days with work_hour >= 8.0
+
+    for (const record of presentRecords) {
+      const statusName = (record.status?.attendance_status_name || '').toLowerCase();
+      if (statusName === 'terlambat' || statusName === 'late') lateDays++;
+
+      // time_in-based lateness vs checkin.start_time (minutes)
+      if (record.time_in) {
+        const hhmm = formatTimeOnly(record.time_in); // 'HH:MM' in WIB
+        const parts = hhmm.split(':').map((v) => parseInt(v, 10) || 0);
+        const timeInMinutes = (parts[0] || 0) * 60 + (parts[1] || 0);
+        const lateness = Math.max(0, timeInMinutes - startMinutes);
+        totalLatenessMinutes += lateness;
+      }
+
+      // work hour consistency >= 8.0 hours
+      const wh = parseFloat(record.work_hour);
+      if (!Number.isNaN(wh) && wh >= 8.0) consistencyDays++;
+    }
+
+    // Metrics in required units
+    const alphaRateRatio = totalDays > 0 ? alphaDays / totalDays : 0; // 0..1
+    const latenessFrequencyRatio = presentDays > 0 ? lateDays / presentDays : 0; // 0..1
+    const avgLatenessMinutes = presentDays > 0 ? totalLatenessMinutes / presentDays : 0; // minutes
+    const workHourConsistencyRatio = presentDays > 0 ? consistencyDays / presentDays : 0; // 0..1
+
+    // Clamp to specified ranges and convert to engine units (percent for ratios)
+    const clamp01 = (v) => Math.max(0, Math.min(1, v));
+    const clampMin = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+    const alpha_rate = Math.round(clamp01(alphaRateRatio) * 10000) / 100; // %
+    const lateness_frequency = Math.round(clamp01(latenessFrequencyRatio) * 10000) / 100; // %
+    const work_hour_consistency = Math.round(clamp01(workHourConsistencyRatio) * 10000) / 100; // %
+    const avg_lateness_minutes = Math.round(clampMin(avgLatenessMinutes, 0, 60) * 100) / 100; // minutes 0..60
+
     return {
-      alpha_rate: Math.round(alphaRate * 100) / 100,
-      avg_lateness_minutes: Math.round(avgLatenessMinutes * 100) / 100,
-      lateness_frequency: Math.round(latenessFrequency * 100) / 100,
-      work_hour_consistency: Math.round(workHourConsistency * 100) / 100,
+      alpha_rate,
+      avg_lateness_minutes,
+      lateness_frequency,
+      work_hour_consistency,
       total_days: totalDays,
       alpha_days: alphaDays,
       late_days: lateDays
@@ -128,7 +144,7 @@ const calculateUserMetrics = async (userId, startDate, endDate) => {
       alpha_rate: 0,
       avg_lateness_minutes: 0,
       lateness_frequency: 0,
-      work_hour_consistency: 75
+      work_hour_consistency: 0
     };
   }
 };
@@ -397,7 +413,7 @@ export const getSummaryReport = async (req, res, next) => {
         logger.error(`Error calculating discipline for user ${userId}:`, error);
         userDisciplineMap[userId] = {
           discipline_score: 50,
-          discipline_label: 'Cukup Disiplin',
+          discipline_label: fuzzyAhpEngine.getDisciplineLabel(50),
           discipline_breakdown: { error: 'Calculation failed' }
         };
       }
@@ -458,10 +474,58 @@ export const getSummaryReport = async (req, res, next) => {
       }
 
       // Status informasi
-      const information =
+      // Enrich information string with predicted checkout and duration if available in notes
+      let information =
         timeOut && timeOut !== '00:00:00'
           ? `Work Duration: ${formatWorkHour(workHour)}`
           : 'Currently checked in';
+
+      const notesStr = attendance.notes || '';
+      const smartMatch = notesStr.match(/\[Smart AC\]\s*pred=([^,]+),\s*used=([^,]+),/);
+      const fallbackMatch = notesStr.match(/\[Fallback AC\]\s*used=([^,]+),/);
+      let predOutStr = null;
+      let modeLabel = null;
+      if (smartMatch) {
+        predOutStr = smartMatch[1];
+        modeLabel = 'smart';
+      } else if (fallbackMatch) {
+        predOutStr = fallbackMatch[1];
+        modeLabel = 'fallback';
+      }
+
+      if (predOutStr) {
+        // Append PredOut
+        information = `${information} | PredOut: ${predOutStr} (${modeLabel})`;
+        // Compute PredDur from time_in to PredOut (clamped at 0 if negative)
+        try {
+          const usedDate = new Date(`${attendance.attendance_date}T${predOutStr}:00+07:00`);
+          const inDate = new Date(attendance.time_in);
+          const diffMs = Math.max(0, usedDate.getTime() - inDate.getTime());
+          const diffHours = diffMs / (1000 * 60 * 60);
+          information = `${information} | PredDur: ${formatWorkHour(diffHours)}`;
+        } catch (_e) {
+          // ignore
+        }
+      }
+
+      // Derive displayed work_hour if DB value is zero or inconsistent (time_out < time_in)
+      let workHourDisplay = workHour;
+      try {
+        const rawIn = attendance.time_in ? new Date(attendance.time_in) : null;
+        const rawOut = attendance.time_out ? new Date(attendance.time_out) : null;
+        const outBeforeIn = rawIn && rawOut ? rawOut.getTime() < rawIn.getTime() : false;
+
+        if (workHourDisplay == null || workHourDisplay <= 0 || outBeforeIn) {
+          if (predOutStr && rawIn) {
+            const usedDate = new Date(`${attendance.attendance_date}T${predOutStr}:00+07:00`);
+            workHourDisplay = calculateWorkHour(rawIn, usedDate);
+          } else if (rawIn && rawOut) {
+            workHourDisplay = calculateWorkHour(rawIn, rawOut);
+          }
+        }
+      } catch (_e) {
+        // keep original workHour
+      }
 
       return {
         attendance_id: attendance.id_attendance,
@@ -471,8 +535,8 @@ export const getSummaryReport = async (req, res, next) => {
         nip_nim: user?.nip_nim || null,
         email: user?.email || null,
         time_in: formatTimeOnly(timeIn),
-        time_out: formatTimeOnly(timeOut),
-        work_hour: formatWorkHour(workHour),
+        time_out: timeOut ? formatTimeOnly(timeOut) : null,
+        work_hour: formatWorkHour(workHourDisplay),
         attendance_date: attendance.attendance_date,
         location_details: locationDetails,
         status: status?.attendance_status_name || 'unknown',
