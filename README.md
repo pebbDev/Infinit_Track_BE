@@ -366,6 +366,18 @@ Jobs Schedule
 └── Manual Triggers Available via API
 ```
 
+## FAHP (Fuzzy AHP) Engine
+
+- Method: TFN → FGM (Buckley) → defuzzify (centroid) → normalize (∑w=1) → CR check.
+- Normalization: min–max to [0,1] with benefit/cost; labeling equal-interval (5 classes).
+- Public APIs:
+  - `calculateWfaScore(place)` → `{ score(0..100), label, breakdown, weights, CR, warning? }`
+  - `calculateDisciplineIndex(metrics)` → `{ score(0..100), label, breakdown, weights, CR, warning? }`
+  - `getWfaAhpWeights()`, `getDisciplineAhpWeights()` → `{... , consistency_ratio}`
+- Configuration: TFN scales and pairwise matrices in `src/analytics/config.fahp.js`.
+- Consistency: CR computed from defuzzified matrix; threshold configurable via `AHP_CR_THRESHOLD` (default 0.10).
+- Auto-checkout: prediction removed; system flags likely-missed-checkout using time tolerance only.
+
 ## 7. Fuzzy AHP Intelligence System
 
 ### **🎯 7.1 WFA Suitability Scoring**

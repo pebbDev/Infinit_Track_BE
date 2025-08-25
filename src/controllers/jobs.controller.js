@@ -1,5 +1,6 @@
-import { triggerCreateGeneralAlpha } from '../jobs/createGeneralAlpha.job.js';
-import { triggerResolveWfaBookings } from '../jobs/resolveWfaBookings.job.js';
+// Removed legacy triggers in favor of date-specific endpoints
+// import { triggerCreateGeneralAlpha } from '../jobs/createGeneralAlpha.job.js';
+// import { triggerResolveWfaBookings } from '../jobs/resolveWfaBookings.job.js';
 import { triggerAutoCheckout } from '../jobs/autoCheckout.job.js';
 import logger from '../utils/logger.js';
 
@@ -8,92 +9,14 @@ import logger from '../utils/logger.js';
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-export const triggerGeneralAlpha = async (req, res) => {
-  try {
-    logger.info('API trigger: Create General Alpha job requested', {
-      triggeredBy: req.user?.id || 'unknown',
-      userRole: req.user?.role?.role_name || 'unknown',
-      timestamp: new Date().toISOString()
-    });
-
-    const result = await triggerCreateGeneralAlpha();
-
-    logger.info('API trigger: Create General Alpha job completed successfully', {
-      result,
-      triggeredBy: req.user?.id || 'unknown'
-    });
-
-    res.json({
-      success: true,
-      message: 'Create General Alpha job executed successfully',
-      data: result,
-      executedAt: new Date().toISOString(),
-      triggeredBy: {
-        userId: req.user?.id || null,
-        userRole: req.user?.role?.role_name || null
-      }
-    });
-  } catch (error) {
-    logger.error('API trigger: Create General Alpha job failed', {
-      error: error.message,
-      stack: error.stack,
-      triggeredBy: req.user?.id || 'unknown'
-    });
-
-    res.status(500).json({
-      success: false,
-      message: 'Failed to execute Create General Alpha job',
-      error: error.message,
-      timestamp: new Date().toISOString()
-    });
-  }
-};
+// Removed triggerGeneralAlpha
 
 /**
  * Trigger Resolve WFA Bookings job manually
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-export const triggerWfaBookings = async (req, res) => {
-  try {
-    logger.info('API trigger: Resolve WFA Bookings job requested', {
-      triggeredBy: req.user?.id || 'unknown',
-      userRole: req.user?.role?.role_name || 'unknown',
-      timestamp: new Date().toISOString()
-    });
-
-    const result = await triggerResolveWfaBookings();
-
-    logger.info('API trigger: Resolve WFA Bookings job completed successfully', {
-      result,
-      triggeredBy: req.user?.id || 'unknown'
-    });
-
-    res.json({
-      success: true,
-      message: 'Resolve WFA Bookings job executed successfully',
-      data: result,
-      executedAt: new Date().toISOString(),
-      triggeredBy: {
-        userId: req.user?.id || null,
-        userRole: req.user?.role?.role_name || null
-      }
-    });
-  } catch (error) {
-    logger.error('API trigger: Resolve WFA Bookings job failed', {
-      error: error.message,
-      stack: error.stack,
-      triggeredBy: req.user?.id || 'unknown'
-    });
-
-    res.status(500).json({
-      success: false,
-      message: 'Failed to execute Resolve WFA Bookings job',
-      error: error.message,
-      timestamp: new Date().toISOString()
-    });
-  }
-};
+// Removed triggerWfaBookings
 
 /**
  * Trigger Missed Checkout flagger job manually
@@ -162,21 +85,7 @@ export const triggerAllJobs = async (req, res) => {
     };
 
     // Execute jobs in the same order as scheduled cron jobs
-    try {
-      logger.info('Executing General Alpha job...');
-      results.generalAlpha = await triggerCreateGeneralAlpha();
-    } catch (error) {
-      results.errors.push({ job: 'generalAlpha', error: error.message });
-      logger.error('General Alpha job failed during bulk execution', error);
-    }
-
-    try {
-      logger.info('Executing Resolve WFA Bookings job...');
-      results.wfaBookings = await triggerResolveWfaBookings();
-    } catch (error) {
-      results.errors.push({ job: 'wfaBookings', error: error.message });
-      logger.error('Resolve WFA Bookings job failed during bulk execution', error);
-    }
+    // Skipped legacy generalAlpha and wfaBookings triggers; keep autoCheckout only
 
     try {
       logger.info('Executing Smart Auto Checkout job...');
@@ -205,7 +114,7 @@ export const triggerAllJobs = async (req, res) => {
       data: {
         results,
         summary: {
-          totalJobs: 3,
+          totalJobs: 1,
           successfulJobs: successCount,
           failedJobs: results.errors.length
         }
@@ -255,7 +164,7 @@ export const getJobsStatus = async (req, res) => {
       jobs: {
         generalAlpha: {
           name: 'Create General Alpha',
-          schedule: '45 23 * * 1-5 (Mon-Fri at 23:45 WIB)',
+          schedule: '55 23 * * 1-5 (Mon-Fri at 23:55 WIB)',
           description: 'Creates alpha records for users with no attendance',
           lastManualTrigger: null // Could be enhanced to track this
         },
@@ -267,7 +176,7 @@ export const getJobsStatus = async (req, res) => {
         },
         autoCheckout: {
           name: 'Smart Auto Checkout',
-          schedule: '55 23 * * * (Daily at 23:55 WIB)',
+          schedule: '45 23 * * * (Daily at 23:45 WIB)',
           description: 'Performs intelligent auto-checkout using Fuzzy AHP',
           lastManualTrigger: null
         }

@@ -1,8 +1,6 @@
 import express from 'express';
 
 import {
-  triggerGeneralAlpha,
-  triggerWfaBookings,
   triggerSmartAutoCheckout,
   triggerAllJobs,
   getJobsStatus
@@ -21,8 +19,7 @@ const router = express.Router();
 router.get('/status', verifyToken, roleGuard(['Admin']), getJobsStatus);
 
 // Manual trigger endpoints
-router.post('/trigger/general-alpha', verifyToken, roleGuard(['Admin']), triggerGeneralAlpha);
-router.post('/trigger/wfa-bookings', verifyToken, roleGuard(['Admin']), triggerWfaBookings);
+// Removed legacy triggers: general-alpha, wfa-bookings
 router.post('/trigger/auto-checkout', verifyToken, roleGuard(['Admin']), triggerSmartAutoCheckout);
 router.post('/trigger/all', verifyToken, roleGuard(['Admin']), triggerAllJobs);
 

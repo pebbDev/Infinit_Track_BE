@@ -1,5 +1,4 @@
 import { body, validationResult } from 'express-validator';
-import { parse, startOfTomorrow, isBefore, startOfDay } from 'date-fns';
 import multer from 'multer';
 
 import User from '../models/user.model.js';
@@ -372,24 +371,7 @@ export const checkInValidation = [
 
 // Booking validation rules
 export const createBookingValidation = [
-  body('schedule_date')
-    .notEmpty()
-    .withMessage('Tanggal jadwal wajib diisi')
-    .matches(/^\d{2}-\d{2}-\d{4}$/)
-    .withMessage('Format tanggal harus DD-MM-YYYY')
-    .custom((value) => {
-      // Parse tanggal menggunakan date-fns untuk akurasi timezone
-      const scheduleDate = parse(value, 'dd-MM-yyyy', new Date());
-
-      // Tentukan "hari esok" dan bandingkan
-      const tomorrowStart = startOfTomorrow();
-      const bookingStart = startOfDay(scheduleDate);
-
-      if (isBefore(bookingStart, tomorrowStart)) {
-        throw new Error('Tanggal booking harus hari esok atau setelahnya');
-      }
-      return true;
-    }),
+  body('schedule_date').notEmpty().withMessage('Tanggal jadwal wajib diisi'),
 
   body('latitude')
     .notEmpty()

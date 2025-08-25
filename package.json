@@ -11,7 +11,11 @@
     "sequelize": "sequelize-cli",
     "migrate": "sequelize-cli db:migrate --migrations-path src/models/migrations",
     "seed": "sequelize-cli db:seed:all --seeders-path src/models/seeders",
-    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test:alpha": "node scripts/test-alpha.js",
+    "test:smart": "node scripts/test-smart-auto-checkout.js",
+    "test:smart:date": "node scripts/test-smart-auto-checkout.js ${DATE}",
+    "seed:alpha-fixtures": "node scripts/seed-alpha-fixtures.js"
   },
   "dependencies": {
     "ahp": "^2.4.2",

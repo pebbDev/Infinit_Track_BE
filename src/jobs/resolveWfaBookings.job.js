@@ -13,23 +13,43 @@ export const resolveWfaBookingsJob = async () => {
   try {
     logger.info('Starting resolve WFA bookings job...');
 
-    // Get current Jakarta time for today's date
+    // Get current Jakarta time and compute target date H-1 (yesterday)
     const now = new Date();
     const jakartaOffset = 7 * 60; // UTC+7 in minutes
     const jakartaTime = new Date(now.getTime() + jakartaOffset * 60000);
-    const todayDate = jakartaTime.toISOString().split('T')[0]; // YYYY-MM-DD format
+    const y = new Date(jakartaTime);
+    y.setDate(jakartaTime.getDate() - 1);
+    const targetDate = y.toISOString().split('T')[0]; // YYYY-MM-DD format
 
-    logger.info(`Processing WFA bookings for date: ${todayDate}`);
+    logger.info(`Processing WFA bookings for date (H-1): ${targetDate}`);
 
-    // TASK A: Handle unused approved WFA bookings for today
-    await handleUnusedApprovedBookings(todayDate, jakartaTime);
+    // TASK A: Handle unused approved WFA bookings for targetDate (H-1)
+    await handleUnusedApprovedBookings(targetDate, jakartaTime);
 
     // TASK B: Handle expired pending bookings
-    await handleExpiredPendingBookings(todayDate, jakartaTime);
+    await handleExpiredPendingBookings(targetDate, jakartaTime);
 
     logger.info('Resolve WFA bookings job completed successfully');
   } catch (error) {
     logger.error('Error in resolve WFA bookings job:', error);
+  }
+};
+
+/**
+ * Run WFA bookings resolver for a specific target date (YYYY-MM-DD)
+ */
+export const resolveWfaBookingsForDate = async (targetDate) => {
+  try {
+    const now = new Date();
+    const jakartaOffset = 7 * 60; // UTC+7 in minutes
+    const jakartaTime = new Date(now.getTime() + jakartaOffset * 60000);
+    logger.info(`Resolve WFA bookings for explicit date: ${targetDate}`);
+    await handleUnusedApprovedBookings(targetDate, jakartaTime);
+    await handleExpiredPendingBookings(targetDate, jakartaTime);
+    return { success: true, targetDate };
+  } catch (error) {
+    logger.error('Error in resolveWfaBookingsForDate:', error);
+    return { success: false, error: error.message };
   }
 };
 
@@ -53,6 +73,13 @@ const handleUnusedApprovedBookings = async (todayDate, jakartaTime) => {
     let alphaRecordsCreated = 0;
     let skippedBookings = 0;
 
+    // Build execution time (HH:mm:ss) in Jakarta, then stamp to target date
+    const exec = new Date(jakartaTime);
+    const hh = String(exec.getHours()).padStart(2, '0');
+    const mm = String(exec.getMinutes()).padStart(2, '0');
+    const ss = String(exec.getSeconds()).padStart(2, '0');
+    const stampedDateTime = new Date(`${todayDate}T${hh}:${mm}:${ss}+07:00`);
+
     // Process each approved booking
     for (const booking of approvedBookings) {
       try {
@@ -72,13 +99,13 @@ const handleUnusedApprovedBookings = async (todayDate, jakartaTime) => {
             status_id: 3, // alpha status
             location_id: booking.location_id,
             booking_id: booking.booking_id,
-            time_in: null,
-            time_out: null,
+            time_in: stampedDateTime,
+            time_out: stampedDateTime,
             work_hour: 0,
             attendance_date: booking.schedule_date,
             notes: `Booking WFA (ID: ${booking.booking_id}) disetujui tetapi tidak digunakan.`,
-            created_at: jakartaTime,
-            updated_at: jakartaTime
+            created_at: stampedDateTime,
+            updated_at: stampedDateTime
           });
 
           alphaRecordsCreated++;

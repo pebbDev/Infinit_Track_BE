@@ -15,7 +15,10 @@ import {
   setupAutoCheckoutConfig,
   processPastAttendances,
   manualResolveWfaBookings,
-  manualCreateGeneralAlpha,
+  // new test triggers
+  manualGeneralAlphaForDate,
+  manualResolveWfaForDate,
+  manualSmartAutoCheckoutForDate,
   logLocationEvent,
   getSmartCheckoutPrediction,
   getSmartEngineConfig,
@@ -76,11 +79,20 @@ router.post(
   manualResolveWfaBookings
 );
 
-// Manual create general alpha records endpoint (Admin only)
+// Removed legacy manual-create-general-alpha; use /manual-general-alpha with target_date
+
+// Test triggers for specific date (Admin only)
+router.post('/manual-general-alpha', roleGuard(['Admin', 'Management']), manualGeneralAlphaForDate);
 router.post(
-  '/manual-create-general-alpha',
+  '/manual-resolve-wfa-for-date',
   roleGuard(['Admin', 'Management']),
-  manualCreateGeneralAlpha
+  manualResolveWfaForDate
+);
+
+router.post(
+  '/manual-smart-auto-checkout',
+  roleGuard(['Admin', 'Management']),
+  manualSmartAutoCheckoutForDate
 );
 
 // DELETE endpoint for admin and management to delete attendance record

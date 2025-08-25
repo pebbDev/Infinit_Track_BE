@@ -3,12 +3,31 @@ import { fgmWeightsTFN, defuzzifyMatrixTFN, computeCR } from '../analytics/fahp.
 import { minMax } from '../analytics/normalization.js';
 import { labelEqualInterval } from '../analytics/labeling.js';
 import { WFA_PAIRWISE_TFN, DISC_PAIRWISE_TFN } from '../analytics/config.fahp.js';
+import { calculateDistance } from './geofence.js';
+
+// Simple memoization for FAHP weights
+let cachedWfaWeights = null;
+let cachedDiscWeights = null;
+let cachedWfaCR = null;
+let cachedDiscCR = null;
+
+const CR_THRESHOLD = parseFloat(process.env.AHP_CR_THRESHOLD || '0.10');
 
 // --- Public API: getWfaAhpWeights (now returns FAHP weights) ---
 function getWfaAhpWeights() {
+  if (cachedWfaWeights && cachedWfaCR != null) {
+    return {
+      location_type: cachedWfaWeights[0],
+      distance_factor: cachedWfaWeights[1],
+      amenity_score: cachedWfaWeights[2],
+      consistency_ratio: cachedWfaCR
+    };
+  }
   const weights = fgmWeightsTFN(WFA_PAIRWISE_TFN);
   const crisp = defuzzifyMatrixTFN(WFA_PAIRWISE_TFN);
   const { CR } = computeCR(crisp);
+  cachedWfaWeights = weights;
+  cachedWfaCR = CR;
   return {
     location_type: weights[0],
     distance_factor: weights[1],
@@ -39,8 +58,23 @@ async function calculateWfaScore(placeDetails, ahpWeights = null) {
     else if (categories.some((c) => c.includes('mall'))) loc01 = 0.6;
     else if (categories.some((c) => c.includes('park'))) loc01 = 0.45;
 
-    const distance = placeDetails.properties?.distance || 1000;
-    const r_dist = minMax(distance, 0, 3000, 'cost');
+    // Distance fallback: use provided properties.distance or compute from coordinates
+    let distanceMeters = placeDetails.properties?.distance;
+    try {
+      if (distanceMeters == null) {
+        const user = placeDetails.userLocation;
+        const coords = placeDetails.geometry?.coordinates;
+        if (user && Array.isArray(coords) && coords.length >= 2) {
+          const lat2 = coords[1];
+          const lon2 = coords[0];
+          distanceMeters = calculateDistance(user.lat, user.lon, lat2, lon2);
+        }
+      }
+    } catch (e) {
+      logger.debug(`Distance fallback failed: ${e.message}`);
+    }
+    if (distanceMeters == null || Number.isNaN(distanceMeters)) distanceMeters = 1000;
+    const r_dist = minMax(distanceMeters, 0, 3000, 'cost');
 
     // Amenity score: expect 0..100 if provided; fallback simple inference
     let amen = 50;
@@ -53,8 +87,7 @@ async function calculateWfaScore(placeDetails, ahpWeights = null) {
     const score01 = W.reduce((s, wi, i) => s + wi * r[i], 0);
     const label = labelEqualInterval(score01);
 
-    // Provide breakdown similar structure
-    return {
+    const result = {
       score: +(score01 * 100).toFixed(2),
       label,
       breakdown: {
@@ -65,6 +98,12 @@ async function calculateWfaScore(placeDetails, ahpWeights = null) {
       weights: W,
       CR: +wObj.consistency_ratio?.toFixed?.(3) || undefined
     };
+
+    if (result.CR != null && result.CR > CR_THRESHOLD) {
+      result.warning = `AHP consistency ratio high (CR=${result.CR}). Consider revising pairwise judgments.`;
+    }
+
+    return result;
   } catch (error) {
     logger.error('Error calculating WFA score (FAHP):', error);
     return { score: 50, label: 'Sedang', breakdown: { error: error.message } };
@@ -73,9 +112,20 @@ async function calculateWfaScore(placeDetails, ahpWeights = null) {
 
 // --- Public API: getDisciplineAhpWeights (now FAHP) ---
 function getDisciplineAhpWeights() {
+  if (cachedDiscWeights && cachedDiscCR != null) {
+    return {
+      alpha_rate: cachedDiscWeights[0],
+      lateness_severity: cachedDiscWeights[1],
+      lateness_frequency: cachedDiscWeights[2],
+      work_focus: cachedDiscWeights[3],
+      consistency_ratio: cachedDiscCR
+    };
+  }
   const weights = fgmWeightsTFN(DISC_PAIRWISE_TFN);
   const crisp = defuzzifyMatrixTFN(DISC_PAIRWISE_TFN);
   const { CR } = computeCR(crisp);
+  cachedDiscWeights = weights;
+  cachedDiscCR = CR;
   return {
     alpha_rate: weights[0],
     lateness_severity: weights[1],
@@ -100,7 +150,7 @@ async function calculateDisciplineIndex(m) {
     const score01 = W.reduce((s, wi, i) => s + wi * r[i], 0);
     const label = labelEqualInterval(score01);
 
-    return {
+    const result = {
       score: +(score01 * 100).toFixed(2),
       label,
       breakdown: {
@@ -112,6 +162,12 @@ async function calculateDisciplineIndex(m) {
       weights: W,
       CR: +wObj.consistency_ratio?.toFixed?.(3) || undefined
     };
+
+    if (result.CR != null && result.CR > CR_THRESHOLD) {
+      result.warning = `AHP consistency ratio high (CR=${result.CR}). Consider revising pairwise judgments.`;
+    }
+
+    return result;
   } catch (error) {
     logger.error('Error calculating Discipline Index (FAHP):', error);
     return { score: 50, label: 'Sedang', breakdown: { error: error.message } };
