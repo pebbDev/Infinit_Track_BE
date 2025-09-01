@@ -15,6 +15,7 @@ import { calculateWorkHour, formatTimeOnly } from '../utils/workHourFormatter.js
 import { toJakartaTime } from '../utils/geofence.js';
 import logger from '../utils/logger.js';
 import { fgmWeightsTFN, defuzzifyMatrixTFN, computeCR } from '../analytics/fahp.js';
+import { extentWeightsTFN } from '../analytics/fahp.extent.js';
 import { SMART_AC_PAIRWISE_TFN } from '../analytics/config.fahp.js';
 
 const TOLERANCE_MIN = parseInt(process.env.LATE_CHECKOUT_TOLERANCE_MIN || '120', 10);
@@ -65,7 +66,11 @@ export const triggerAutoCheckout = async () => {
 // ================= SMART AUTO CHECKOUT (FAHP + DOW) =================
 
 function getFahpWeights() {
-  const weights = fgmWeightsTFN(SMART_AC_PAIRWISE_TFN);
+  const method = (process.env.FAHP_METHOD || 'extent').toLowerCase();
+  const weights =
+    method === 'fgm'
+      ? fgmWeightsTFN(SMART_AC_PAIRWISE_TFN)
+      : extentWeightsTFN(SMART_AC_PAIRWISE_TFN);
   // Optional CR logging for diagnostics
   try {
     const crisp = defuzzifyMatrixTFN(SMART_AC_PAIRWISE_TFN);

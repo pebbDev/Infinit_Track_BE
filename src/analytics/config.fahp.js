@@ -26,7 +26,7 @@ export const DISC_PAIRWISE_TFN = [
 // Smart Auto Checkout criteria: [HIST, CHECKIN, CONTEXT, TRANSITION]
 export const SMART_AC_PAIRWISE_TFN = [
   [TFN.M, TFN.H, TFN.VH, TFN.M],
-  [invTFN(TFN.H), TFN.M, TFN.H, TFN.L],
+  [invTFN(TFN.H), TFN.M, TFN.H, invTFN(TFN.M)],
   [invTFN(TFN.VH), invTFN(TFN.H), TFN.M, invTFN(TFN.VH)],
   [TFN.M, TFN.H, TFN.VH, TFN.M]
 ];
