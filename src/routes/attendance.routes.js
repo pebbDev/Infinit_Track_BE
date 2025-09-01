@@ -12,15 +12,12 @@ import {
   getAllAttendances,
   manualAutoCheckout,
   getAutoCheckoutSettings,
-  setupAutoCheckoutConfig,
-  processPastAttendances,
   manualResolveWfaBookings,
   // new test triggers
   manualGeneralAlphaForDate,
   manualResolveWfaForDate,
   manualSmartAutoCheckoutForDate,
   logLocationEvent,
-  getSmartCheckoutPrediction,
   getSmartEngineConfig,
   getEnhancedAutoCheckoutSettings,
   testTimezone
@@ -59,15 +56,7 @@ router.get('/debug-checkin-time', debugCheckInTime); // Debug endpoint
 // Manual auto checkout endpoint (Admin only)
 router.post('/manual-auto-checkout', roleGuard(['Admin', 'Management']), manualAutoCheckout);
 
-// Setup auto checkout configuration and process past data (Admin only)
-router.post('/setup-auto-checkout', roleGuard(['Admin', 'Management']), setupAutoCheckoutConfig);
-
-// Process past attendance records only (Admin only)
-router.post(
-  '/process-past-attendances',
-  roleGuard(['Admin', 'Management']),
-  processPastAttendances
-);
+// (Removed) Process past attendance records endpoint
 
 // Get auto checkout settings endpoint (for debugging)
 router.get('/auto-checkout-settings', roleGuard(['Admin', 'Management']), getAutoCheckoutSettings);
@@ -98,8 +87,7 @@ router.post(
 // DELETE endpoint for admin and management to delete attendance record
 router.delete('/:id', verifyToken, roleGuard(['Admin', 'Management']), deleteAttendance);
 
-// Smart checkout prediction endpoints (Admin only)
-router.post('/smart-prediction', roleGuard(['Admin', 'Management']), getSmartCheckoutPrediction);
+// (Removed) Smart checkout prediction endpoint
 router.get('/smart-config', roleGuard(['Admin', 'Management']), getSmartEngineConfig);
 router.get(
   '/enhanced-auto-checkout-settings',

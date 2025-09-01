@@ -98,7 +98,9 @@ async function main() {
   } finally {
     try {
       await sequelize.close();
-    } catch {}
+    } catch (e) {
+      // noop: ignore close errors in seeder context
+    }
   }
 }
 

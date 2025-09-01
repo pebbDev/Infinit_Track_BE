@@ -1,5 +1,6 @@
 import logger from './logger.js';
 import { fgmWeightsTFN, defuzzifyMatrixTFN, computeCR } from '../analytics/fahp.js';
+import { extentWeightsTFN } from '../analytics/fahp.extent.js';
 import { minMax } from '../analytics/normalization.js';
 import { labelEqualInterval } from '../analytics/labeling.js';
 import { WFA_PAIRWISE_TFN, DISC_PAIRWISE_TFN } from '../analytics/config.fahp.js';
@@ -12,6 +13,11 @@ let cachedWfaCR = null;
 let cachedDiscCR = null;
 
 const CR_THRESHOLD = parseFloat(process.env.AHP_CR_THRESHOLD || '0.10');
+const FAHP_METHOD = (process.env.FAHP_METHOD || 'extent').toLowerCase();
+
+function selectWeights(matrixTFN) {
+  return FAHP_METHOD === 'fgm' ? fgmWeightsTFN(matrixTFN) : extentWeightsTFN(matrixTFN);
+}
 
 // --- Public API: getWfaAhpWeights (now returns FAHP weights) ---
 function getWfaAhpWeights() {
@@ -23,7 +29,7 @@ function getWfaAhpWeights() {
       consistency_ratio: cachedWfaCR
     };
   }
-  const weights = fgmWeightsTFN(WFA_PAIRWISE_TFN);
+  const weights = selectWeights(WFA_PAIRWISE_TFN);
   const crisp = defuzzifyMatrixTFN(WFA_PAIRWISE_TFN);
   const { CR } = computeCR(crisp);
   cachedWfaWeights = weights;
@@ -45,10 +51,21 @@ async function calculateWfaScore(placeDetails, ahpWeights = null) {
     // r_loc: map simple categories to [0,1]
     const categories = placeDetails.properties?.categories || [];
     const name = (placeDetails.properties?.name || '').toLowerCase();
-    const isCafe = categories.some((c) => c.includes('cafe') || c.includes('coffee')) || name.includes('cafe') || name.includes('coffee');
-    const isLibrary = categories.some((c) => c.includes('library')) || name.includes('library') || name.includes('perpustakaan');
-    const isHotel = categories.some((c) => c.includes('hotel') || c.includes('accommodation')) || name.includes('hotel');
-    const isRestaurant = categories.some((c) => c.includes('restaurant') || c.includes('food')) || name.includes('restaurant') || name.includes('restoran');
+    const isCafe =
+      categories.some((c) => c.includes('cafe') || c.includes('coffee')) ||
+      name.includes('cafe') ||
+      name.includes('coffee');
+    const isLibrary =
+      categories.some((c) => c.includes('library')) ||
+      name.includes('library') ||
+      name.includes('perpustakaan');
+    const isHotel =
+      categories.some((c) => c.includes('hotel') || c.includes('accommodation')) ||
+      name.includes('hotel');
+    const isRestaurant =
+      categories.some((c) => c.includes('restaurant') || c.includes('food')) ||
+      name.includes('restaurant') ||
+      name.includes('restoran');
 
     let loc01 = 0.4;
     if (isCafe) loc01 = 1.0;
@@ -121,7 +138,7 @@ function getDisciplineAhpWeights() {
       consistency_ratio: cachedDiscCR
     };
   }
-  const weights = fgmWeightsTFN(DISC_PAIRWISE_TFN);
+  const weights = selectWeights(DISC_PAIRWISE_TFN);
   const crisp = defuzzifyMatrixTFN(DISC_PAIRWISE_TFN);
   const { CR } = computeCR(crisp);
   cachedDiscWeights = weights;
@@ -196,15 +213,40 @@ function getDisciplineLabel(score) {
 function categorizePlace(place) {
   const categories = place.properties?.categories || [];
   const name = (place.properties?.name || '').toLowerCase();
-  if (categories.some((c) => c.includes('cafe') || c.includes('coffee')) || name.includes('cafe') || name.includes('coffee')) return 'cafe';
-  if (categories.some((c) => c.includes('library')) || name.includes('library') || name.includes('perpustakaan')) return 'library';
-  if (categories.some((c) => c.includes('hotel') || c.includes('accommodation')) || name.includes('hotel')) return 'hotel';
-  if (categories.some((c) => c.includes('restaurant') || c.includes('food')) || name.includes('restaurant') || name.includes('restoran')) return 'restaurant';
+  if (
+    categories.some((c) => c.includes('cafe') || c.includes('coffee')) ||
+    name.includes('cafe') ||
+    name.includes('coffee')
+  )
+    return 'cafe';
+  if (
+    categories.some((c) => c.includes('library')) ||
+    name.includes('library') ||
+    name.includes('perpustakaan')
+  )
+    return 'library';
+  if (
+    categories.some((c) => c.includes('hotel') || c.includes('accommodation')) ||
+    name.includes('hotel')
+  )
+    return 'hotel';
+  if (
+    categories.some((c) => c.includes('restaurant') || c.includes('food')) ||
+    name.includes('restaurant') ||
+    name.includes('restoran')
+  )
+    return 'restaurant';
   return 'other';
 }
 
 function getCategoryDisplayName(category) {
-  const map = { cafe: 'Cafe', library: 'Perpustakaan', hotel: 'Hotel', restaurant: 'Restaurant', other: 'Lainnya' };
+  const map = {
+    cafe: 'Cafe',
+    library: 'Perpustakaan',
+    hotel: 'Hotel',
+    restaurant: 'Restaurant',
+    other: 'Lainnya'
+  };
   return map[category] || 'Tidak Diketahui';
 }
 

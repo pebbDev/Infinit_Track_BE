@@ -72,6 +72,8 @@ main()
   .finally(async () => {
     try {
       await sequelize.close();
-    } catch {}
+    } catch (e) {
+      // noop: ignore close errors in test context
+    }
     process.exit(0);
   });
