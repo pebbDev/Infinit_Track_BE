@@ -2998,6 +2998,152 @@ components:
           example: 5
           description: 'Number of times this job has been executed'
 
+    WFARecommendation:
+      type: object
+      description: Work From Anywhere location recommendation with Fuzzy AHP scoring
+      properties:
+        location_id:
+          type: integer
+          example: 15
+          description: Unique location identifier
+        name:
+          type: string
+          example: 'Starbucks Senayan City'
+          description: Location name
+        address:
+          type: string
+          example: 'Senayan City Mall, Lt. 2, Jakarta Selatan'
+          description: Full address of the location
+        distance:
+          type: number
+          format: float
+          example: 850.5
+          description: Distance from user location in meters
+        coordinates:
+          type: object
+          properties:
+            latitude:
+              type: number
+              format: float
+              example: -6.225014
+            longitude:
+              type: number
+              format: float
+              example: 106.799415
+        fuzzy_ahp_score:
+          type: number
+          format: float
+          example: 8.7
+          description: Overall Fuzzy AHP score (0-10 scale)
+        suitability_label:
+          type: string
+          example: 'Sangat Sesuai'
+          enum: ['Tidak Sesuai', 'Kurang Sesuai', 'Cukup Sesuai', 'Sesuai', 'Sangat Sesuai']
+          description: Human-readable suitability assessment
+        criteria_scores:
+          type: object
+          description: Individual criteria scores
+          properties:
+            wifi_quality:
+              type: object
+              properties:
+                score:
+                  type: number
+                  format: float
+                  example: 4.5
+                normalized_score:
+                  type: number
+                  format: float
+                  example: 0.9
+                weight:
+                  type: number
+                  format: float
+                  example: 0.35
+            noise_level:
+              type: object
+              properties:
+                score:
+                  type: number
+                  format: float
+                  example: 3.2
+                normalized_score:
+                  type: number
+                  format: float
+                  example: 0.64
+                weight:
+                  type: number
+                  format: float
+                  example: 0.25
+            amenities:
+              type: object
+              properties:
+                score:
+                  type: integer
+                  example: 8
+                normalized_score:
+                  type: number
+                  format: float
+                  example: 0.8
+                weight:
+                  type: number
+                  format: float
+                  example: 0.25
+            distance:
+              type: object
+              properties:
+                score:
+                  type: number
+                  format: float
+                  example: 850.5
+                normalized_score:
+                  type: number
+                  format: float
+                  example: 0.7
+                weight:
+                  type: number
+                  format: float
+                  example: 0.15
+        ranking:
+          type: integer
+          example: 1
+          description: Ranking position among all recommendations
+        recommendation_confidence:
+          type: number
+          format: float
+          example: 0.92
+          description: Confidence level of the recommendation (0-1)
+        features:
+          type: array
+          items:
+            type: string
+          example: ['WiFi', 'AC', 'Power Outlets', 'Quiet Area', 'Coffee']
+          description: Available features/amenities at the location
+        operating_hours:
+          type: object
+          properties:
+            open:
+              type: string
+              format: time
+              example: '07:00:00'
+            close:
+              type: string
+              format: time
+              example: '22:00:00'
+            is_24_hours:
+              type: boolean
+              example: false
+        contact_info:
+          type: object
+          properties:
+            phone:
+              type: string
+              nullable: true
+              example: '+62-21-12345678'
+            website:
+              type: string
+              nullable: true
+              example: 'https://starbucks.co.id'
+
     Pagination:
       type: object
       properties:
@@ -3118,6 +3264,212 @@ components:
               error:
                 type: string
                 example: 'Database connection failed'
+
+    ValidationError:
+      description: Validation error with detailed field errors
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              message:
+                type: string
+                example: 'Validation failed'
+              errors:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    field:
+                      type: string
+                      example: 'email'
+                    message:
+                      type: string
+                      example: 'Email format is invalid'
+                    code:
+                      type: string
+                      example: 'INVALID_FORMAT'
+                    value:
+                      type: string
+                      example: 'invalid-email'
+                example:
+                  - field: 'email'
+                    message: 'Email format is invalid'
+                    code: 'INVALID_FORMAT'
+                    value: 'invalid-email'
+                  - field: 'password'
+                    message: 'Password must be at least 6 characters'
+                    code: 'MIN_LENGTH'
+                    value: '123'
+
+    LocationError:
+      description: Location-related error (geofence, distance, etc.)
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              message:
+                type: string
+                example: 'Location verification failed'
+              error_type:
+                type: string
+                enum: ['GEOFENCE_VIOLATION', 'INVALID_COORDINATES', 'LOCATION_SERVICE_UNAVAILABLE']
+                example: 'GEOFENCE_VIOLATION'
+              details:
+                type: object
+                properties:
+                  user_location:
+                    type: object
+                    properties:
+                      latitude:
+                        type: number
+                        format: float
+                        example: -6.300000
+                      longitude:
+                        type: number
+                        format: float
+                        example: 106.900000
+                  allowed_locations:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                          example: 'Main Office'
+                        radius:
+                          type: integer
+                          example: 100
+                  distance_from_nearest:
+                    type: number
+                    format: float
+                    example: 250.5
+                    description: 'Distance in meters from the nearest allowed location'
+
+    AttendanceError:
+      description: Attendance-specific error
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              message:
+                type: string
+                example: 'Attendance operation failed'
+              error_type:
+                type: string
+                enum: ['ALREADY_CHECKED_IN', 'NOT_CHECKED_IN', 'INVALID_CHECKOUT_TIME', 'FACE_VERIFICATION_FAILED']
+                example: 'ALREADY_CHECKED_IN'
+              details:
+                type: object
+                properties:
+                  current_attendance:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 123
+                      time_in:
+                        type: string
+                        format: time
+                        example: '09:00:00'
+                      status:
+                        type: string
+                        example: 'Present'
+                  suggested_action:
+                    type: string
+                    example: 'You can check out using attendance ID 123'
+
+    BookingError:
+      description: WFA Booking-specific error
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              message:
+                type: string
+                example: 'Booking operation failed'
+              error_type:
+                type: string
+                enum: ['BOOKING_ALREADY_EXISTS', 'INVALID_DATE', 'LOCATION_TOO_FAR', 'QUOTA_EXCEEDED']
+                example: 'BOOKING_ALREADY_EXISTS'
+              details:
+                type: object
+                properties:
+                  existing_booking:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 456
+                      date:
+                        type: string
+                        format: date
+                        example: '2025-07-10'
+                      status:
+                        type: string
+                        example: 'pending'
+                  constraints:
+                    type: object
+                    properties:
+                      max_bookings_per_month:
+                        type: integer
+                        example: 5
+                      current_bookings_this_month:
+                        type: integer
+                        example: 3
+                      max_advance_days:
+                        type: integer
+                        example: 30
+
+    AuthenticationError:
+      description: Authentication-specific error with detailed information
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              message:
+                type: string
+                example: 'Authentication failed'
+              error_type:
+                type: string
+                enum: ['INVALID_CREDENTIALS', 'TOKEN_EXPIRED', 'TOKEN_INVALID', 'ACCOUNT_INACTIVE', 'ACCOUNT_LOCKED']
+                example: 'TOKEN_EXPIRED'
+              details:
+                type: object
+                properties:
+                  token_info:
+                    type: object
+                    properties:
+                      expired_at:
+                        type: string
+                        format: date-time
+                        example: '2025-07-05T10:30:00.000Z'
+                      issued_at:
+                        type: string
+                        format: date-time
+                        example: '2025-07-04T10:30:00.000Z'
+                  suggested_action:
+                    type: string
+                    example: 'Please login again to get a new token'
 
 tags:
   - name: System
