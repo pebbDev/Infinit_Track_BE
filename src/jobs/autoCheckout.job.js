@@ -13,6 +13,7 @@ import {
 } from '../models/index.js';
 import { calculateWorkHour, formatTimeOnly } from '../utils/workHourFormatter.js';
 import { toJakartaTime } from '../utils/geofence.js';
+import fuzzyAhpEngine from '../utils/fuzzyAhpEngine.js';
 import logger from '../utils/logger.js';
 import { fgmWeightsTFN, defuzzifyMatrixTFN, computeCR } from '../analytics/fahp.js';
 import { extentWeightsTFN } from '../analytics/fahp.extent.js';
@@ -94,16 +95,7 @@ function minutesSinceMidnightWIB(d) {
   return j.getHours() * 60 + j.getMinutes();
 }
 
-function clampCheckout(targetDate, candidate, timeIn, endBoundaryStr) {
-  if (!candidate) return null;
-  const end = new Date(`${targetDate}T${endBoundaryStr || '18:00:00'}+07:00`);
-  const tIn = new Date(timeIn);
-  let final = new Date(Math.max(candidate.getTime(), tIn.getTime()));
-  if (final.getTime() > end.getTime()) final = end;
-  const finalDateStr = final.toISOString().split('T')[0];
-  if (finalDateStr !== targetDate) return end;
-  return final;
-}
+// clampCheckout moved into fuzzyAhpEngine.weightedPrediction helper
 
 // Return null if candidate violates constraints instead of clamping
 function sanitizeCandidate(targetDate, candidate, timeIn, endBoundaryStr) {
@@ -246,21 +238,8 @@ async function buildCandidates(att, targetDate, fallbackEndStr) {
   return candidates;
 }
 
-function weightedPrediction(candidates, weights, targetDate, timeIn, fallbackEndStr) {
-  const order = ['HIST', 'CHECKIN', 'CONTEXT', 'TRANSITION'];
-  const available = order.filter((k) => candidates[k]);
-  if (available.length === 0) return null;
-  const idx = { HIST: 0, CHECKIN: 1, CONTEXT: 2, TRANSITION: 3 };
-  const w = available.map((k) => weights[idx[k]]);
-  const sum = w.reduce((a, b) => a + b, 0) || 1;
-  const wn = w.map((x) => x / sum);
-  const mins = available.map((k) => minutesSinceMidnightWIB(candidates[k]));
-  const predMin = mins.reduce((acc, m, i) => acc + wn[i] * m, 0);
-  const hh = String(Math.floor(predMin / 60)).padStart(2, '0');
-  const mm = String(Math.floor(predMin % 60)).padStart(2, '0');
-  const checkout = new Date(`${targetDate}T${hh}:${mm}:00+07:00`);
-  return clampCheckout(targetDate, checkout, timeIn, fallbackEndStr);
-}
+// Use engine's weighted prediction
+const weightedPrediction = fuzzyAhpEngine.weightedPrediction;
 
 export const runSmartAutoCheckoutForDate = async (targetDate) => {
   try {

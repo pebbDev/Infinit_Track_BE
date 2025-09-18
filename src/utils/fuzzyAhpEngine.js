@@ -4,7 +4,7 @@ import { extentWeightsTFN } from '../analytics/fahp.extent.js';
 import { minMax } from '../analytics/normalization.js';
 import { labelEqualInterval } from '../analytics/labeling.js';
 import { WFA_PAIRWISE_TFN, DISC_PAIRWISE_TFN } from '../analytics/config.fahp.js';
-import { calculateDistance } from './geofence.js';
+import { calculateDistance, toJakartaTime } from './geofence.js';
 
 // Simple memoization for FAHP weights
 let cachedWfaWeights = null;
@@ -17,6 +17,40 @@ const FAHP_METHOD = (process.env.FAHP_METHOD || 'extent').toLowerCase();
 
 function selectWeights(matrixTFN) {
   return FAHP_METHOD === 'fgm' ? fgmWeightsTFN(matrixTFN) : extentWeightsTFN(matrixTFN);
+}
+
+// --- Time utilities for Smart Auto Checkout weighted prediction ---
+function minutesSinceMidnightWIB(dateLike) {
+  const j = toJakartaTime(dateLike);
+  return j.getHours() * 60 + j.getMinutes();
+}
+
+function clampCheckout(targetDate, candidate, timeIn, endBoundaryStr) {
+  if (!candidate) return null;
+  const end = new Date(`${targetDate}T${endBoundaryStr || '18:00:00'}+07:00`);
+  const tIn = new Date(timeIn);
+  let final = new Date(Math.max(candidate.getTime(), tIn.getTime()));
+  if (final.getTime() > end.getTime()) final = end;
+  const finalDateStr = final.toISOString().split('T')[0];
+  if (finalDateStr !== targetDate) return end;
+  return final;
+}
+
+// --- Public utility: weightedPrediction for Smart Auto Checkout ---
+function weightedPrediction(candidates, weights, targetDate, timeIn, fallbackEndStr) {
+  const order = ['HIST', 'CHECKIN', 'CONTEXT', 'TRANSITION'];
+  const available = order.filter((k) => candidates[k]);
+  if (available.length === 0) return null;
+  const idx = { HIST: 0, CHECKIN: 1, CONTEXT: 2, TRANSITION: 3 };
+  const w = available.map((k) => weights[idx[k]]);
+  const sum = w.reduce((a, b) => a + b, 0) || 1;
+  const wn = w.map((x) => x / sum);
+  const mins = available.map((k) => minutesSinceMidnightWIB(candidates[k]));
+  const predMin = mins.reduce((acc, m, i) => acc + wn[i] * m, 0);
+  const hh = String(Math.floor(predMin / 60)).padStart(2, '0');
+  const mm = String(Math.floor(predMin % 60)).padStart(2, '0');
+  const checkout = new Date(`${targetDate}T${hh}:${mm}:00+07:00`);
+  return clampCheckout(targetDate, checkout, timeIn, fallbackEndStr);
 }
 
 // --- Public API: getWfaAhpWeights (now returns FAHP weights) ---
@@ -191,11 +225,6 @@ async function calculateDisciplineIndex(m) {
   }
 }
 
-// --- Public API: predictCheckoutTime (removed) ---
-async function predictCheckoutTime() {
-  throw new Error('predictCheckoutTime is removed in FAHP refactor. Use time-tolerance flagging.');
-}
-
 // Utilities kept for controllers compatibility
 function getWfaScoreLabel(score) {
   const s = Number(score);
@@ -254,7 +283,6 @@ export default {
   // Main functions
   calculateWfaScore,
   calculateDisciplineIndex,
-  predictCheckoutTime,
 
   // Weights
   getWfaAhpWeights,
@@ -264,5 +292,6 @@ export default {
   getWfaScoreLabel,
   getDisciplineLabel,
   categorizePlace,
-  getCategoryDisplayName
+  getCategoryDisplayName,
+  weightedPrediction
 };

@@ -18,15 +18,13 @@
     "seed:alpha-fixtures": "node scripts/seed-alpha-fixtures.js"
   },
   "dependencies": {
-    "ahp": "^2.4.2",
+    
     "axios": "^1.9.0",
     "bcryptjs": "^3.0.2",
     "cloudinary": "^2.6.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
-    "csv-writer": "^1.6.0",
     "date-fns": "^4.1.0",
-    "date-fns-tz": "^3.2.0",
     "date-holidays": "^3.24.3",
     "dotenv": "^16.5.0",
     "express": "^4.21.2",
@@ -37,9 +35,7 @@
     "multer": "^2.0.1",
     "mysql2": "^3.14.1",
     "node-cron": "^4.1.0",
-    "node-fetch": "^3.3.2",
     "sequelize": "^6.37.7",
-    "sharp": "^0.34.2",
     "swagger-ui-express": "^4",
     "winston": "^3",
     "winston-daily-rotate-file": "^4",
